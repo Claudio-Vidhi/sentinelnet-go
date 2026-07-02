@@ -1,0 +1,20 @@
+# Binari
+/sentinelnet
+/sentinelnet.exe
+*.exe
+/dist/
+
+# Dati locali
+/data/
+sentinelnet.db
+sentinelnet.db-wal
+sentinelnet.db-shm
+mac_history.db*
+backup-config/
+*.key
+secret.key
+jwt_secret.key
+
+# Env
+.env
+.env.*
