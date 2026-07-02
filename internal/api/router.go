@@ -18,6 +18,11 @@ func (a *App) Router() http.Handler {
 	r.Get("/", a.serveDashboard)
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
+	// Heartbeat dell'interfaccia (pub): la sua assenza arresta il server quando
+	// autoShutdown è attivo. GET e POST (fetch keepalive / sendBeacon).
+	r.Get("/api/heartbeat", a.handleHeartbeat)
+	r.Post("/api/heartbeat", a.handleHeartbeat)
+
 	// --- Auth (pub) ---
 	r.Get("/api/auth/status", a.handleAuthStatus)
 	r.Post("/api/auth/register", a.handleRegister)
@@ -90,6 +95,7 @@ func (a *App) Router() http.Handler {
 	// --- MAC tracker ---
 	r.Post("/api/mac/scan", a.requireAuth("operator", a.handleMacScan))
 	r.Get("/api/mac/search", a.requireAuth("", a.handleMacSearch))
+	r.Get("/api/mac/locate", a.requireAuth("", a.handleMacLocate))
 	r.Get("/api/mac/stats", a.requireAuth("", a.handleMacStats))
 	r.Post("/api/mac/settings", a.requireAuth("admin", a.handleMacSettings))
 	r.Get("/api/mac/overrides", a.requireAuth("", a.handleMacOverrides))

@@ -15,6 +15,7 @@ type MacSighting struct {
 	Interface   string `json:"interface"`
 	PortChannel string `json:"port_channel"`
 	IsUplink    bool   `json:"is_uplink"`
+	UplinkTo    string `json:"uplink_to"` // vicino raggiunto via l'uplink (transito)
 	Tenant      string `json:"tenant"`
 	FirstSeen   string `json:"first_seen"`
 	LastSeen    string `json:"last_seen"`
@@ -34,20 +35,20 @@ func (s *Store) UpsertSighting(m *MacSighting) error {
 		uplink = 1
 	}
 	_, err := s.DB.Exec(`INSERT INTO mac_sightings
-		(mac, oui_vendor, vlan, switch_ip, switch_name, interface, port_channel, is_uplink, tenant, first_seen, last_seen, seen_count)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?,1)
+		(mac, oui_vendor, vlan, switch_ip, switch_name, interface, port_channel, is_uplink, uplink_to, tenant, first_seen, last_seen, seen_count)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1)
 		ON CONFLICT(mac, switch_ip, interface, vlan) DO UPDATE SET
 			oui_vendor=excluded.oui_vendor, switch_name=excluded.switch_name,
 			port_channel=excluded.port_channel, is_uplink=excluded.is_uplink,
-			tenant=excluded.tenant, last_seen=excluded.last_seen,
+			uplink_to=excluded.uplink_to, tenant=excluded.tenant, last_seen=excluded.last_seen,
 			seen_count=mac_sightings.seen_count+1`,
-		m.Mac, m.OuiVendor, m.Vlan, m.SwitchIP, m.SwitchName, m.Interface, m.PortChannel, uplink, m.Tenant, now, now)
+		m.Mac, m.OuiVendor, m.Vlan, m.SwitchIP, m.SwitchName, m.Interface, m.PortChannel, uplink, m.UplinkTo, m.Tenant, now, now)
 	return err
 }
 
 // SearchSightings: filtri opzionali; tenants limita la visibilità (vuoto = tutti).
 func (s *Store) SearchSightings(mac, vlan, iface, switchIP string, tenants []string, limit int) ([]*MacSighting, error) {
-	q := `SELECT mac, oui_vendor, vlan, switch_ip, switch_name, interface, port_channel, is_uplink, tenant, first_seen, last_seen, seen_count
+	q := `SELECT mac, oui_vendor, vlan, switch_ip, switch_name, interface, port_channel, is_uplink, COALESCE(uplink_to,''), tenant, first_seen, last_seen, seen_count
 		FROM mac_sightings WHERE 1=1`
 	var args []any
 	if mac != "" {
@@ -86,7 +87,7 @@ func (s *Store) SearchSightings(mac, vlan, iface, switchIP string, tenants []str
 		m := &MacSighting{}
 		var uplink int
 		if err := rows.Scan(&m.Mac, &m.OuiVendor, &m.Vlan, &m.SwitchIP, &m.SwitchName, &m.Interface,
-			&m.PortChannel, &uplink, &m.Tenant, &m.FirstSeen, &m.LastSeen, &m.SeenCount); err != nil {
+			&m.PortChannel, &uplink, &m.UplinkTo, &m.Tenant, &m.FirstSeen, &m.LastSeen, &m.SeenCount); err != nil {
 			return nil, err
 		}
 		m.IsUplink = uplink != 0

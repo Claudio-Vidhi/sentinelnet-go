@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/collect"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/mac"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/topology"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -95,6 +97,10 @@ func (a *App) macScanDevice(ctx context.Context, d *store.Device) (int, error) {
 		format = ov.Fmt
 	}
 
+	// Interfacce uplink note dalla topologia (porte con vicino CDP/LLDP o membri
+	// di port-channel): i MAC visti qui sono in transito, non collegati localmente.
+	uplinkMap := a.uplinkInterfaces(d.IP)
+
 	sess, err := collect.Dial(ctx, d.IP, a.resolveCreds(d))
 	if err != nil {
 		_ = a.store.SetVersionStatus(d.IP, "offline")
@@ -129,9 +135,14 @@ func (a *App) macScanDevice(ctx context.Context, d *store.Device) (int, error) {
 		if strings.HasPrefix(strings.ToLower(e.Interface), "po") {
 			pc = e.Interface
 		}
+		// Uplink se: la topologia lo conferma (vicino noto), è un port-channel,
+		// oppure la porta trasporta molti MAC (euristica trunk di fallback).
+		neighbor, topoUplink := uplinkMap[normPort(e.Interface)]
+		isUplink := topoUplink || pc != "" || mac.IsUplinkPort(perIface[e.Interface])
+		uplinkTo := neighbor
 		s := &store.MacSighting{
 			Mac: e.Mac, OuiVendor: "", Vlan: e.Vlan, SwitchIP: d.IP, SwitchName: switchName,
-			Interface: e.Interface, PortChannel: pc, IsUplink: mac.IsUplinkPort(perIface[e.Interface]),
+			Interface: e.Interface, PortChannel: pc, IsUplink: isUplink, UplinkTo: uplinkTo,
 			Tenant: d.Tenant,
 		}
 		if err := a.store.UpsertSighting(s); err == nil {
@@ -139,6 +150,114 @@ func (a *App) macScanDevice(ctx context.Context, d *store.Device) (int, error) {
 		}
 	}
 	return saved, nil
+}
+
+// uplinkInterfaces mappa le porte uplink di uno switch (forma canonica) al nome
+// del vicino raggiunto. Deriva da CDP/LLDP (porte con vicino) e dai port-channel
+// (il nome del PC — es. "Po10" — è ciò che compare nella MAC-table per i bundle).
+func (a *App) uplinkInterfaces(ip string) map[string]string {
+	out := map[string]string{}
+	row, err := a.store.GetTopology(ip)
+	if err != nil || row == nil {
+		return out
+	}
+	var neighbors []topology.Neighbor
+	_ = json.Unmarshal([]byte(row.NeighborsJSON), &neighbors)
+	byLocal := map[string]string{} // normPort(localPort) -> remoteHost
+	for _, n := range neighbors {
+		if n.LocalPort == "" {
+			continue
+		}
+		host := n.RemoteHost
+		if host == "" {
+			host = n.RemoteIP
+		}
+		np := normPort(n.LocalPort)
+		out[np] = host
+		byLocal[np] = host
+	}
+	var pcs []topology.PortChannel
+	_ = json.Unmarshal([]byte(row.PortChannelsJSON), &pcs)
+	for _, pc := range pcs {
+		// Vicino dell'aggregato = vicino di un qualsiasi membro.
+		neigh := ""
+		for _, m := range pc.Members {
+			if h, ok := byLocal[normPort(m)]; ok && h != "" {
+				neigh = h
+				break
+			}
+			out[normPort(m)] = byLocal[normPort(m)] // membro fisico → uplink
+		}
+		out[normPort(pc.Name)] = neigh // "Po10" com'è nella MAC-table
+	}
+	return out
+}
+
+// handleMacLocate individua l'origine di un MAC: la/e porta/e d'accesso dove è
+// realmente collegato, distinte dagli switch che l'hanno visto solo in transito
+// sugli uplink (e verso quale vicino puntava quell'uplink).
+func (a *App) handleMacLocate(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
+	macQuery := strings.TrimSpace(r.URL.Query().Get("mac"))
+	if macQuery == "" {
+		writeErr(w, http.StatusBadRequest, "parametro mac obbligatorio")
+		return
+	}
+	sightings, err := a.store.SearchSightings(macQuery, "", "", "", scoped, 500)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if len(sightings) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"origin": []any{}, "transit": []any{}})
+		return
+	}
+
+	// Raggruppa per MAC esatto (una ricerca parziale può restituire più MAC).
+	byMac := map[string][]*store.MacSighting{}
+	order := []string{}
+	for _, s := range sightings {
+		if _, ok := byMac[s.Mac]; !ok {
+			order = append(order, s.Mac)
+		}
+		byMac[s.Mac] = append(byMac[s.Mac], s)
+	}
+
+	type result struct {
+		Mac       string               `json:"mac"`
+		OUIVendor string               `json:"oui_vendor"`
+		Origin    []*store.MacSighting `json:"origin"`
+		Transit   []*store.MacSighting `json:"transit"`
+	}
+	var results []result
+	for _, m := range order {
+		rows := byMac[m]
+		res := result{Mac: m}
+		for _, s := range rows {
+			if s.OuiVendor != "" {
+				res.OUIVendor = s.OuiVendor
+			}
+			if s.IsUplink {
+				res.Transit = append(res.Transit, s)
+			} else {
+				res.Origin = append(res.Origin, s)
+			}
+		}
+		results = append(results, res)
+	}
+
+	// Compatibilità: se cercato un singolo MAC, esponi anche origin/transit piatti.
+	if len(results) == 1 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"mac":     results[0].Mac,
+			"origin":  results[0].Origin,
+			"transit": results[0].Transit,
+			"results": results,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 func (a *App) handleMacSearch(w http.ResponseWriter, r *http.Request) {

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/config"
@@ -27,6 +28,13 @@ type App struct {
 	// Stato del triage globale in background (per la progress bar).
 	triageMu     sync.Mutex
 	triageStatus TriageStatus
+
+	// Ciclo di vita legato all'interfaccia: la pagina invia un heartbeat; alla
+	// sua chiusura il server si arresta e libera la porta (vedi lifecycle.go).
+	lastBeat     atomic.Int64 // unix nano dell'ultimo heartbeat
+	autoShutdown atomic.Bool
+	onShutdown   func()
+	shutdownOnce sync.Once
 }
 
 func NewApp(cfg *config.Config, st *store.Store, authSvc *auth.Service, vault *crypto.Vault) *App {

@@ -11,7 +11,28 @@ make build        # binario statico ./sentinelnet
 make test
 ```
 
-Prima esecuzione: apri `http://localhost:8000`, il wizard crea il primo admin.
+All'avvio SentinelNet mostra una **finestra di dialogo nativa** (MessageBox su
+Windows; zenity/terminale altrove) per scegliere come aprire l'interfaccia:
+
+- **App integrata** — finestra dedicata senza barra indirizzi (Edge/Chrome in `--app`,
+  profilo separato), aspetto di app nativa derivata dall'HTML.
+- **Browser** — apre il browser predefinito.
+- **Nessuna** — solo server, apri tu l'URL.
+
+Salta la domanda con il flag `-ui` o l'env `SENTINELNET_UI` (`app` | `browser` | `none` | `ask`):
+
+```bash
+go run ./cmd/sentinelnet -ui app       # finestra dedicata
+go run ./cmd/sentinelnet -ui browser   # browser predefinito
+go run ./cmd/sentinelnet -ui none      # nessuna apertura (deploy/headless)
+```
+
+**Arresto automatico**: con interfaccia attiva (app o browser), il server si arresta
+e **libera la porta** alla chiusura dell'interfaccia — quando la finestra app dedicata
+si chiude, o quando la pagina smette di inviare heartbeat (scheda/finestra chiusa).
+Con `-ui none` questo comportamento è disattivo (deployment come servizio).
+
+Prima esecuzione: nella pagina il wizard crea il primo admin.
 
 ## Configurazione (variabili d'ambiente)
 
@@ -22,6 +43,7 @@ Prima esecuzione: apri `http://localhost:8000`, il wizard crea il primo admin.
 | `SENTINELNET_JWT_SECRET` | (auto) | segreto JWT; se vuoto è generato e persistito |
 | `SENTINELNET_MASTER_KEY` | (auto) | chiave AES-256 base64 (32 byte) per le password apparato |
 | `SENTINELNET_DEFAULT_USER` / `_PASS` / `_SECRET` | — | credenziali del "Profilo Rete Standard" (device con `profile=default`) |
+| `SENTINELNET_UI` | `ask` | interfaccia all'avvio: `app` \| `browser` \| `none` \| `ask` (sovrascrivibile con `-ui`) |
 
 ## Struttura
 
@@ -35,8 +57,9 @@ internal/collect/      SSH/CLI (Netmiko-lite): triage, backup, comandi, ping, te
 internal/topology/     parser CDP/LLDP, port-channel, VTP
 internal/mac/           parser MAC address-table / bridge-domain
 internal/euvd/          proxy ENISA EUVD (whitelist param, size ≤ 100)
+internal/ui/            avvio interfaccia: finestra app (Chromium --app) o browser
 internal/api/           router chi, middleware RBAC/tenant scoping, handler (contratti JSON = FastAPI)
-web/                    dashboard.html (embed.FS)
+web/                    dashboard.html (embed.FS) — copia servita dal binario
 ```
 
 Le rotte `/api/...` mantengono i contratti JSON dell'app FastAPI: il frontend gira invariato.
@@ -48,3 +71,9 @@ Le rotte `/api/...` mantengono i contratti JSON dell'app FastAPI: il frontend gi
 - I backup config sono file in `data/backup-config/<tenant>/<host>-<ip>.txt`.
 - Trasporti MAC NETCONF/RESTCONF: attualmente il MAC scan usa CLI (con override ad-hoc
   per apparati non standard, es. bridge-domain su C8000V).
+- **Origine MAC**: ogni avvistamento è marcato *accesso* (porta dove il device è
+  collegato) o *transito* (visto su un uplink verso un vicino). L'uplink è dedotto
+  dalla topologia CDP/LLDP e dai port-channel. `GET /api/mac/locate?mac=...` e il
+  pulsante "localizza" in MAC Tracker mostrano origine e switch di transito.
+- **UI**: il file servito è `web/dashboard.html` (embeddato). Se modifichi il
+  `dashboard.html` in root, ricopialo: `cp dashboard.html web/dashboard.html`.

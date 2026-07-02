@@ -47,18 +47,33 @@ func Open(path string) (*Store, error) {
 }
 
 func (s *Store) migrate() error {
+	if _, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT)`); err != nil {
+		return err
+	}
 	entries, err := fs.Glob(migrationsFS, "migrations/*.sql")
 	if err != nil {
 		return err
 	}
 	sort.Strings(entries)
 	for _, name := range entries {
+		// Ogni migrazione è applicata una sola volta: alcuni statement (es.
+		// ALTER TABLE ADD COLUMN) non sono idempotenti.
+		var applied int
+		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, name).Scan(&applied); err != nil {
+			return err
+		}
+		if applied > 0 {
+			continue
+		}
 		sqlBytes, err := migrationsFS.ReadFile(name)
 		if err != nil {
 			return err
 		}
 		if _, err := s.DB.Exec(string(sqlBytes)); err != nil {
 			return fmt.Errorf("migrazione %s: %w", name, err)
+		}
+		if _, err := s.DB.Exec(`INSERT INTO schema_migrations(name, applied_at) VALUES(?, datetime('now'))`, name); err != nil {
+			return err
 		}
 	}
 	return nil

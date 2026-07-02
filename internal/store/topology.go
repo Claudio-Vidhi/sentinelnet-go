@@ -53,6 +53,19 @@ func (s *Store) ListTopology() ([]*TopologyRow, error) {
 	return out, rows.Err()
 }
 
+// GetTopology restituisce la riga topologica di un apparato (nil se assente).
+func (s *Store) GetTopology(ip string) (*TopologyRow, error) {
+	t := &TopologyRow{}
+	err := s.DB.QueryRow(`SELECT ip, COALESCE(hostname,''), COALESCE(vtp_domain,''), COALESCE(vtp_mode,''),
+		COALESCE(neighbors_json,'[]'), COALESCE(portchannels_json,'[]'), COALESCE(updated_at,'')
+		FROM topology_data WHERE ip = ?`, ip).
+		Scan(&t.IP, &t.Hostname, &t.VTPDomain, &t.VTPMode, &t.NeighborsJSON, &t.PortChannelsJSON, &t.UpdatedAt)
+	if err != nil {
+		return nil, nil //nolint:nilerr // assenza dati topologia non è un errore
+	}
+	return t, nil
+}
+
 // ClearTopology azzera i dati topologici (reset mappa).
 func (s *Store) ClearTopology() (int64, error) {
 	res, err := s.DB.Exec(`DELETE FROM topology_data`)
