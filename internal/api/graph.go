@@ -145,10 +145,10 @@ func (a *App) buildGraph(scoped []string, group string) ([]*Node, []*Link, error
 		alt := dst + "|" + src
 		if l, ok := linkSet[alt]; ok {
 			if lp != "" {
-				l.RemotePorts = appendUniq(l.RemotePorts, lp)
+				l.RemotePorts = appendUniqPort(l.RemotePorts, lp)
 			}
 			if rp != "" {
-				l.LocalPorts = appendUniq(l.LocalPorts, rp)
+				l.LocalPorts = appendUniqPort(l.LocalPorts, rp)
 			}
 			return
 		}
@@ -158,12 +158,12 @@ func (a *App) buildGraph(scoped []string, group string) ([]*Node, []*Link, error
 			linkSet[key] = l
 		}
 		if lp != "" {
-			l.LocalPorts = appendUniq(l.LocalPorts, lp)
-			l.LocalPort = lp
+			l.LocalPorts = appendUniqPort(l.LocalPorts, lp)
+			l.LocalPort = l.LocalPorts[0]
 		}
 		if rp != "" {
-			l.RemotePorts = appendUniq(l.RemotePorts, rp)
-			l.RemotePort = rp
+			l.RemotePorts = appendUniqPort(l.RemotePorts, rp)
+			l.RemotePort = l.RemotePorts[0]
 		}
 	}
 
@@ -217,15 +217,30 @@ func (a *App) buildGraph(scoped []string, group string) ([]*Node, []*Link, error
 	}
 	for _, l := range linkSet {
 		l.MemberCount = len(l.LocalPorts)
+		if len(l.RemotePorts) > l.MemberCount {
+			l.MemberCount = len(l.RemotePorts)
+		}
 		if l.MemberCount == 0 {
 			l.MemberCount = 1
 		}
+		// Port-channel: verifica la config di ENTRAMBI gli estremi del link.
 		if pcs, ok := pcByOwner[l.Source]; ok {
 			for _, pc := range pcs {
 				if portsOverlap(pc.Members, l.LocalPorts) {
 					l.IsPortChannel = true
 					l.PCName = pc.Name
 					break
+				}
+			}
+		}
+		if !l.IsPortChannel {
+			if pcs, ok := pcByOwner[l.Target]; ok {
+				for _, pc := range pcs {
+					if portsOverlap(pc.Members, l.RemotePorts) {
+						l.IsPortChannel = true
+						l.PCName = pc.Name
+						break
+					}
 				}
 			}
 		}
@@ -329,13 +344,49 @@ func appendUniq(sl []string, v string) []string {
 	return append(sl, v)
 }
 
+// normPort canonicalizza un nome interfaccia per il confronto: CDP annuncia
+// "Ethernet0/1" mentre LLDP e la config usano "Et0/1" — sono la stessa porta.
+var portForms = []struct{ long, short string }{
+	{"twentyfivegigabitethernet", "twe"},
+	{"hundredgigabitethernet", "hu"},
+	{"fortygigabitethernet", "fo"},
+	{"tengigabitethernet", "te"},
+	{"twogigabitethernet", "tw"},
+	{"gigabitethernet", "gi"},
+	{"fastethernet", "fa"},
+	{"ethernet", "et"},
+	{"port-channel", "po"},
+}
+
+func normPort(p string) string {
+	s := strings.ToLower(strings.TrimSpace(p))
+	for _, f := range portForms {
+		if strings.HasPrefix(s, f.long) {
+			return f.short + s[len(f.long):]
+		}
+	}
+	return s
+}
+
+// appendUniqPort deduplica per porta canonica, preservando la forma originale
+// del primo avvistamento (per la label in mappa).
+func appendUniqPort(sl []string, v string) []string {
+	nv := normPort(v)
+	for _, x := range sl {
+		if normPort(x) == nv {
+			return sl
+		}
+	}
+	return append(sl, v)
+}
+
 func portsOverlap(a, b []string) bool {
 	set := map[string]bool{}
 	for _, x := range a {
-		set[strings.ToLower(x)] = true
+		set[normPort(x)] = true
 	}
 	for _, y := range b {
-		if set[strings.ToLower(y)] {
+		if set[normPort(y)] {
 			return true
 		}
 	}

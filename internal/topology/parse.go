@@ -117,9 +117,11 @@ func ParseLLDPNeighbors(localHost, out string) []Neighbor {
 	var neighbors []Neighbor
 	reLocal := regexp.MustCompile(`(?i)Local (?:Intf|Port id):\s*([\w./\-]+)`)
 	reSys := regexp.MustCompile(`(?i)System Name:\s*(\S+)`)
-	rePort := regexp.MustCompile(`(?i)Port id:\s*([\w./\-]+)`)
-	reMgmt := regexp.MustCompile(`(?i)Management Address:\s*([\d.]+)`)
-	blocks := regexp.MustCompile(`(?im)^-{5,}|^Local Intf`).Split(out, -1)
+	rePort := regexp.MustCompile(`(?im)^Port id:\s*([\w./\-]+)`)
+	reMgmt := regexp.MustCompile(`(?i)Management Address(?:es)?:?\s*\n?\s*(?:IP:\s*)?([\d.]+)`)
+	// Blocchi separati SOLO dalle righe di trattini: dividere anche su
+	// "Local Intf" mangerebbe proprio la riga da cui estrarre la porta locale.
+	blocks := regexp.MustCompile(`(?m)^-{4,}\s*$`).Split(out, -1)
 	for _, b := range blocks {
 		sys := reSys.FindStringSubmatch(b)
 		if len(sys) != 2 {

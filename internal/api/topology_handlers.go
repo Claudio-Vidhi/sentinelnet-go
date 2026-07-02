@@ -95,9 +95,20 @@ func (a *App) handlePortchannels(w http.ResponseWriter, r *http.Request) {
 				Total: len(pc.Members), Up: len(pc.Members), Status: "up",
 			}
 			// Vicini raggiunti tramite le interfacce membro del port-channel.
+			// Il link può avere lo switch su ENTRAMBI i lati (source o target).
 			for _, l := range links {
-				if l.Source == row.IP && l.IsPortChannel && portsOverlap(l.LocalPorts, pc.Members) {
-					if t, ok := nodeByID[l.Target]; ok {
+				var otherID string
+				var myPorts []string
+				switch row.IP {
+				case l.Source:
+					otherID, myPorts = l.Target, l.LocalPorts
+				case l.Target:
+					otherID, myPorts = l.Source, l.RemotePorts
+				default:
+					continue
+				}
+				if portsOverlap(myPorts, pc.Members) {
+					if t, ok := nodeByID[otherID]; ok {
 						po.Neighbors = appendUniq(po.Neighbors, t.Label)
 					}
 				}
