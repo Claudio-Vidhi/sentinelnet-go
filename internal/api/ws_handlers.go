@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/collect"
@@ -78,15 +79,59 @@ func (a *App) handleWSTerminal(w http.ResponseWriter, r *http.Request) {
 		cancel()
 	}()
 
-	// Input dal browser → apparato.
+	// Input dal browser → apparato: ogni carattere viene inoltrato subito
+	// (l'eco arriva dall'apparato), mentre una copia "ombra" della riga in
+	// corso viene bufferizzata per validarla con isCommandSafe() all'Invio.
+	// Porto di ws_to_ssh() in app_server.py.
+	var lineBuf strings.Builder
 	for {
 		typ, data, err := conn.Read(ctx)
 		if err != nil {
 			return
 		}
-		if typ == websocket.MessageText || typ == websocket.MessageBinary {
-			if _, err := bridge.Write(data); err != nil {
-				return
+		if typ != websocket.MessageText && typ != websocket.MessageBinary {
+			continue
+		}
+		for _, ch := range string(data) {
+			switch {
+			case ch == '\r' || ch == '\n':
+				line := strings.TrimSpace(lineBuf.String())
+				if line != "" && !isCommandSafe(line) {
+					if _, err := bridge.Write([]byte{0x15}); err != nil { // Ctrl-U: cancella la riga sull'apparato
+						return
+					}
+					wctx, wcancel := context.WithTimeout(ctx, 10*time.Second)
+					_ = conn.Write(wctx, websocket.MessageText, []byte(
+						"\r\n[Comando bloccato] Operazione non consentita per motivi di sicurezza (in blacklist).\r\n"))
+					wcancel()
+					a.auditLog("Comando da terminale bloccato per blacklist ('" + line + "') su '" + ip +
+						"' dall'utente '" + username + "'.")
+					lineBuf.Reset()
+					continue
+				}
+				lineBuf.Reset()
+				if _, err := bridge.Write([]byte{byte(ch)}); err != nil {
+					return
+				}
+			case ch == '\x7f' || ch == '\x08': // backspace
+				s := lineBuf.String()
+				if len(s) > 0 {
+					lineBuf.Reset()
+					lineBuf.WriteString(s[:len(s)-1])
+				}
+				if _, err := bridge.Write([]byte{byte(ch)}); err != nil {
+					return
+				}
+			case ch == '\x03': // Ctrl-C: azzera la riga corrente
+				lineBuf.Reset()
+				if _, err := bridge.Write([]byte{byte(ch)}); err != nil {
+					return
+				}
+			default:
+				lineBuf.WriteRune(ch)
+				if _, err := bridge.Write([]byte(string(ch))); err != nil {
+					return
+				}
 			}
 		}
 	}

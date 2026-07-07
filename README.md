@@ -43,6 +43,7 @@ Prima esecuzione: nella pagina il wizard crea il primo admin.
 | `SENTINELNET_JWT_SECRET` | (auto) | segreto JWT; se vuoto è generato e persistito |
 | `SENTINELNET_MASTER_KEY` | (auto) | chiave AES-256 base64 (32 byte) per le password apparato |
 | `SENTINELNET_DEFAULT_USER` / `_PASS` / `_SECRET` | — | credenziali del "Profilo Rete Standard" (device con `profile=default`) |
+| `SENTINELNET_HOST` / `SENTINELNET_PORT` | — | override host/porta; senza override vale il bind IP salvato da `/api/settings/network` |
 | `SENTINELNET_UI` | `ask` | interfaccia all'avvio: `app` \| `browser` \| `none` \| `ask` (sovrascrivibile con `-ui`) |
 
 ## Struttura
@@ -57,6 +58,7 @@ internal/collect/      SSH/CLI (Netmiko-lite): triage, backup, comandi, ping, te
 internal/topology/     parser CDP/LLDP, port-channel, VTP
 internal/mac/           parser MAC address-table / bridge-domain
 internal/euvd/          proxy ENISA EUVD (whitelist param, size ≤ 100)
+internal/configanalyzer/ analisi running-config dai backup (interfacce, VLAN, ACL, rotte, VPN)
 internal/ui/            avvio interfaccia: finestra app (Chromium --app) o browser
 internal/api/           router chi, middleware RBAC/tenant scoping, handler (contratti JSON = FastAPI)
 web/                    dashboard.html (embed.FS) — copia servita dal binario
@@ -75,5 +77,4 @@ Le rotte `/api/...` mantengono i contratti JSON dell'app FastAPI: il frontend gi
   collegato) o *transito* (visto su un uplink verso un vicino). L'uplink è dedotto
   dalla topologia CDP/LLDP e dai port-channel. `GET /api/mac/locate?mac=...` e il
   pulsante "localizza" in MAC Tracker mostrano origine e switch di transito.
-- **UI**: il file servito è `web/dashboard.html` (embeddato). Se modifichi il
-  `dashboard.html` in root, ricopialo: `cp dashboard.html web/dashboard.html`.
+- **UI**: il file servito è `web/dashboard.html` (embeddato nel binario).

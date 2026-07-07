@@ -13,6 +13,7 @@ import (
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/mac"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/topology"
+	"github.com/go-chi/chi/v5"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -266,6 +267,20 @@ func (a *App) handleMacSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	results, err := a.store.SearchSightings(
 		q.Get("mac"), q.Get("vlan"), q.Get("interface"), q.Get("switch"), scoped, 2000)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// handleMacSwitchTable ritorna l'ultimo stato noto della MAC-table di uno
+// switch, porto di GET /api/mac/switch/{ip} (mac_history.switch_table).
+func (a *App) handleMacSwitchTable(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
+	ip := chi.URLParam(r, "ip")
+	results, err := a.store.SearchSightings("", "", "", ip, scoped, 2000)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return

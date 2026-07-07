@@ -112,6 +112,50 @@ func (a *App) runCommandsOn(ctx context.Context, d *store.Device, commands []str
 	return map[string]any{"status": "success", "output": strings.TrimSpace(out)}
 }
 
+// ---- Comando singolo (send-command) ----
+
+type sendCommandReq struct {
+	IP      string `json:"ip"`
+	Command string `json:"command"`
+}
+
+// handleSendCommand esegue un singolo comando CLI su un dispositivo (one-shot),
+// porto di POST /api/send-command in app_server.py. Blocca i comandi in
+// blacklist con audit-log, come il riferimento Python.
+func (a *App) handleSendCommand(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	var req sendCommandReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	if !isCommandSafe(req.Command) {
+		a.auditLog("Tentativo bloccato di esecuzione comando non sicuro '" + req.Command +
+			"' su '" + req.IP + "' dall'utente '" + claims.Username + "'.")
+		writeErr(w, http.StatusBadRequest, "Comando non consentito per motivi di sicurezza (in blacklist).")
+		return
+	}
+
+	d, err := a.store.GetDevice(req.IP)
+	if err != nil || d == nil {
+		writeErr(w, http.StatusNotFound, "Dispositivo non presente in inventario")
+		return
+	}
+	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
+	if !canSeeTenant(scoped, d.Tenant) {
+		writeErr(w, http.StatusForbidden, "tenant non consentito")
+		return
+	}
+
+	a.auditLog("Comando CLI '" + req.Command + "' richiesto su dispositivo '" + req.IP +
+		"' dall'utente '" + claims.Username + "' (One-Shot API).")
+
+	ctx, cancel := context.WithTimeout(r.Context(), 45*time.Second)
+	defer cancel()
+	res := a.runCommandsOn(ctx, d, []string{req.Command}, "exec", false)
+	writeJSON(w, http.StatusOK, res)
+}
+
 // ---- Subnet scan ----
 
 type scanReq struct {

@@ -60,6 +60,15 @@ func main() {
 	authSvc := auth.New(jwtSecret)
 
 	app := api.NewApp(cfg, st, authSvc, vault)
+
+	// Precedenza indirizzo di ascolto: SENTINELNET_ADDR (host:porta completo) >
+	// SENTINELNET_HOST (solo host, porta di default) > host persistito > default.
+	addr := cfg.Addr
+	if os.Getenv("SENTINELNET_ADDR") == "" {
+		addr = app.ResolveListenAddr()
+	}
+	cfg.Addr = addr
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           app.Router(),

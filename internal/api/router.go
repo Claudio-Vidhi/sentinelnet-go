@@ -76,6 +76,7 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/topology/reset", a.requireAuth("operator", a.handleTopologyReset))
 
 	// --- Triage / commands / ping ---
+	r.Post("/api/send-command", a.requireAuth("operator", a.handleSendCommand))
 	r.Post("/api/run-triage", a.requireAuth("operator", a.handleRunTriage))
 	r.Post("/api/triage/{ip}", a.requireAuth("operator", a.handleTriageOne))
 	r.Get("/api/triage-status", a.requireAuth("", a.handleTriageStatus))
@@ -101,6 +102,15 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/mac/overrides", a.requireAuth("", a.handleMacOverrides))
 	r.Post("/api/mac/overrides", a.requireAuth("operator", a.handleMacOverrideSave))
 	r.Post("/api/mac/overrides/delete", a.requireAuth("operator", a.handleMacOverrideDelete))
+	r.Get("/api/mac/switch/{ip}", a.requireAuth("", a.handleMacSwitchTable))
+
+	// --- Config Analyzer (auth read, tenant-scoped) ---
+	r.Get("/api/config-analyzer", a.requireAuth("", a.handleConfigAnalyzerAll))
+	r.Get("/api/config-analyzer/{ip}", a.requireAuth("", a.handleConfigAnalyzerDevice))
+
+	// --- Settings (adm) ---
+	r.Get("/api/settings/network", a.requireAuth("admin", a.handleGetNetworkSettings))
+	r.Post("/api/settings/network", a.requireAuth("admin", a.handleSetNetworkSettings))
 
 	// --- WS terminal ---
 	r.Post("/api/ws-token", a.requireAuth("operator", a.handleWSToken))
