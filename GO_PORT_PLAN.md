@@ -806,3 +806,34 @@ Verifica: build statico, `go vet` e `go test ./...` verdi su 16 package; 20 test
 corrispondente, sede passata a central, job di un'altra sede).
 
 Resta: visio export, analizzatori firewall (fortios/panos), MCP + AI e il difetto D5.
+
+### 2026-07-20 — M-1 completo e superficie delle impostazioni chiusa
+
+| Intervento | File |
+|---|---|
+| `commandAllowed` per ruolo + `isBulkCommandAllowed`, applicati a send-command, bulk, relay e terminale WS. | `internal/api/{command_safety.go,command_handlers.go,sites_handlers.go,ws_handlers.go}` |
+| 6 rotte: `/api/settings/{cli-blacklist,fortigate-preview,app}`. | `internal/api/{settings_handlers.go,router.go}` |
+
+Note di implementazione:
+
+- **M-1 riguardava quattro punti, non uno**: `command_allowed` nel Python è applicato a
+  send-command, bulk, relay di sede e terminale WebSocket. Portarne uno solo avrebbe lasciato
+  il terminale più severo delle API — un admin poteva riavviare via API ma non digitandolo.
+- **Il bulk non ha bypass per nessuno**, come nel Python: lista separata e più corta, perché
+  lì il comando parte verso decine di apparati insieme.
+- **Solo `"false"` disattiva la blacklist**: chiave assente, vuota o malformata la lasciano
+  attiva. Un dato illeggibile non deve spegnere una protezione.
+- **`/api/settings/app` espone solo `port`** (divergenza §9): TLS, CORS e no_browser non
+  esistono nel server Go, e le finestre di retention appartengono alla configurazione
+  dell'osservabilità. Le chiavi non gestite sono rifiutate con 400 invece di essere accettate
+  e ignorate. `port` è onorato davvero da `ResolveListenAddr`, con test end-to-end dalla POST
+  all'indirizzo risolto.
+
+Difetto trovato e corretto: `handleBulkCommand` non aveva **nessun** controllo sui comandi
+distruttivi, mentre il Python blocca reload/reboot/erase/format/write erase senza bypass. Era
+la lacuna più seria fra quelle emerse, perché l'invio massivo non si ferma al primo apparato.
+
+Verifica: build statico, `go vet` e `go test ./...` verdi su 16 package; 15 test fra sicurezza
+dei comandi e rotte di impostazioni.
+
+Resta: visio export, analizzatori firewall (fortios/panos), MCP + AI e il difetto D5.
