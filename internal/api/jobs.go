@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"strings"
 	"time"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/collect"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/driver"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
 
@@ -70,10 +72,22 @@ func (a *App) resolveCreds(d *store.Device) collect.Credentials {
 	return collect.Credentials{Username: d.Username, Password: pass, EnableSecret: sec}
 }
 
+// driverFor risolve il driver CLI di un vendor: prima il campo 'driver' del
+// registro vendor, poi il fallback per nome vendor (come resolve_driver del Python).
+func (a *App) driverFor(vendor string) driver.Driver {
+	drvName := ""
+	if vendors, err := a.store.ListVendors(); err == nil {
+		if m, ok := vendors[strings.ToLower(strings.TrimSpace(vendor))]; ok {
+			drvName = m.Driver
+		}
+	}
+	return driver.ResolveOrDefault(vendor, drvName)
+}
+
 // triageDevice esegue backup+triage su un device, persistendo versione,
 // backup config e dati di topologia. Ritorna il risultato collect.
 func (a *App) triageDevice(ctx context.Context, d *store.Device) collect.TriageResult {
-	res := collect.RunBackupAndTriage(ctx, d.IP, a.resolveCreds(d))
+	res := collect.RunBackupAndTriage(ctx, d.IP, a.resolveCreds(d), a.driverFor(d.Vendor))
 	if res.Status != "success" {
 		_ = a.store.SetVersionStatus(d.IP, "offline")
 		return res

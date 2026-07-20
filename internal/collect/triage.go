@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/driver"
 )
 
 // Ping: apertura TCP sulla 22 come proxy di raggiungibilità (niente ICMP raw,
@@ -31,21 +33,26 @@ type TriageResult struct {
 	LLDPOutput string // "show lldp neighbors detail"
 }
 
-var (
-	hostnameRe = regexp.MustCompile(`(?m)^hostname\s+(\S+)`)
-	iosVerRe   = regexp.MustCompile(`(?i)Version\s+([\w.()]+)`)
-)
+var hostnameRe = regexp.MustCompile(`(?m)^hostname\s+(\S+)`)
 
 // RunBackupAndTriage: si collega, rileva hostname/versione e scarica la config.
-func RunBackupAndTriage(ctx context.Context, host string, creds Credentials) TriageResult {
+//
+// drv fornisce i comandi specifici del vendor: senza di esso venivano inviati
+// "show version" e "show running-config" a qualunque apparato, con il risultato
+// che HP, Juniper, PAN-OS e AireOS producevano versione non rilevata e backup
+// vuoto, silenziosamente. Se nil si usa il driver Cisco IOS (comportamento storico).
+func RunBackupAndTriage(ctx context.Context, host string, creds Credentials, drv driver.Driver) TriageResult {
+	if drv == nil {
+		drv = driver.CiscoIOS{}
+	}
 	sess, err := Dial(ctx, host, creds)
 	if err != nil {
 		return TriageResult{Status: "error", Message: err.Error()}
 	}
 	defer sess.Close()
 
-	verOut := sess.Run("show version")
-	cfg := sess.Run("show running-config")
+	version := drv.GetVersion(sess)
+	cfg := sess.Run(drv.BackupCommand())
 
 	res := TriageResult{
 		Status:     "success",
@@ -59,25 +66,10 @@ func RunBackupAndTriage(ctx context.Context, host string, creds Credentials) Tri
 	} else if p := strings.TrimRight(sess.prompt, "#>"); p != "" {
 		res.Hostname = p
 	}
-	if m := iosVerRe.FindStringSubmatch(verOut); len(m) == 2 {
-		res.Version = m[1]
-	} else {
-		res.Version = firstNonEmptyLine(verOut)
+	// I driver ritornano "Unknown"; l'inventario Go usa "Non Rilevata".
+	if version == "" || version == "Unknown" {
+		version = "Non Rilevata"
 	}
-	if res.Version == "" {
-		res.Version = "Non Rilevata"
-	}
+	res.Version = version
 	return res
-}
-
-func firstNonEmptyLine(s string) string {
-	for _, l := range strings.Split(s, "\n") {
-		if t := strings.TrimSpace(l); t != "" {
-			if len(t) > 80 {
-				t = t[:80]
-			}
-			return t
-		}
-	}
-	return ""
 }

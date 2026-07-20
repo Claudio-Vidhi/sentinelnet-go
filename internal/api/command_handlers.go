@@ -136,14 +136,8 @@ func (a *App) handleSendCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	d, err := a.store.GetDevice(req.IP)
-	if err != nil || d == nil {
-		writeErr(w, http.StatusNotFound, "Dispositivo non presente in inventario")
-		return
-	}
-	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
-	if !canSeeTenant(scoped, d.Tenant) {
-		writeErr(w, http.StatusForbidden, "tenant non consentito")
+	d, ok := a.assertDeviceAllowed(w, r, req.IP)
+	if !ok {
 		return
 	}
 
@@ -205,6 +199,8 @@ func (a *App) handleScanSubnet(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) runScan(jobID string, hosts []string, req scanReq) {
 	creds := collect.Credentials{Username: a.cfg.DefaultUser, Password: a.cfg.DefaultPass, EnableSecret: a.cfg.DefaultSecret}
+	// Risolto una volta sola: tutti gli host della scansione hanno lo stesso vendor.
+	drv := a.driverFor(req.Vendor)
 	g, ctx := errgroup.WithContext(context.Background())
 	g.SetLimit(32)
 	for _, ip := range hosts {
@@ -215,7 +211,7 @@ func (a *App) runScan(jobID string, hosts []string, req scanReq) {
 			result := map[string]any{"ip": ip, "reachable": false, "ssh_ok": false, "hostname": "", "vendor": req.Vendor, "added": false}
 			if collect.Ping(hctx, ip) {
 				result["reachable"] = true
-				if res := collect.RunBackupAndTriage(hctx, ip, creds); res.Status == "success" {
+				if res := collect.RunBackupAndTriage(hctx, ip, creds, drv); res.Status == "success" {
 					result["ssh_ok"] = true
 					result["hostname"] = res.Hostname
 					if req.AutoAdd {
