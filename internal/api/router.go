@@ -110,6 +110,34 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/arp/client-map", a.requireAuth("", a.handleARPClientMap))
 	r.Get("/api/arp/stats", a.requireAuth("", a.handleARPStats))
 
+	// --- FortiGate: gestione target (adm) ---
+	r.Get("/api/fortigate/tokens", a.requireAuth("admin", a.handleFGTTokens))
+	r.Post("/api/fortigate/token", a.requireAuth("admin", a.handleFGTSetToken))
+	r.Get("/api/fortigate/targets", a.requireAuth("admin", a.handleFGTTargets))
+	r.Post("/api/fortigate/targets/active", a.requireAuth("admin", a.handleFGTSetActiveTarget))
+	r.Post("/api/fortigate/targets/{ip}/test", a.requireAuth("admin", a.handleFGTTestTarget))
+	r.Put("/api/fortigate/targets/{ip}", a.requireAuth("admin", a.handleFGTUpdateTarget))
+
+	// --- FortiGate: osservabilità (auth read, tenant-scoped via assertDeviceAllowed) ---
+	r.Get("/api/fortigate/{ip}/status", a.requireAuth("", a.handleFGTStatus))
+	r.Get("/api/fortigate/{ip}/interfaces", a.requireAuth("", a.handleFGTInterfaces))
+	r.Get("/api/fortigate/{ip}/arp", a.requireAuth("", a.handleFGTARP))
+	r.Get("/api/fortigate/{ip}/dhcp-leases", a.requireAuth("", a.handleFGTDHCPLeases))
+	r.Get("/api/fortigate/{ip}/device-inventory", a.requireAuth("", a.handleFGTDeviceInventory))
+	r.Get("/api/fortigate/{ip}/policies", a.requireAuth("", a.handleFGTPolicies))
+	r.Get("/api/fortigate/{ip}/policy-stats", a.requireAuth("", a.handleFGTPolicyStats))
+	r.Get("/api/fortigate/{ip}/routes", a.requireAuth("", a.handleFGTRoutes))
+	r.Get("/api/fortigate/{ip}/wifi/clients", a.requireAuth("", a.handleFGTWifiClients))
+	r.Get("/api/fortigate/{ip}/wifi/aps", a.requireAuth("", a.handleFGTManagedAPs))
+	r.Get("/api/fortigate/{ip}/firewall/addresses", a.requireAuth("", a.handleFGTFirewallAddresses))
+	r.Get("/api/fortigate/{ip}/firewall/policy-objects", a.requireAuth("", a.handleFGTPolicyObjects))
+	r.Get("/api/fortigate/{ip}/firewall/services", a.requireAuth("", a.handleFGTCustomServices))
+	r.Post("/api/fortigate/{ip}/policy-lookup", a.requireAuth("", a.handleFGTPolicyLookup))
+	r.Post("/api/fortigate/{ip}/sessions", a.requireAuth("", a.handleFGTSessions))
+	r.Post("/api/fortigate/{ip}/logs", a.requireAuth("", a.handleFGTLogs))
+	// Contiene segreti: richiede 'operator' ed è sempre in audit.
+	r.Get("/api/fortigate/{ip}/full-config", a.requireAuth("operator", a.handleFGTFullConfig))
+
 	// --- Observability (Live Flows) ---
 	r.Get("/api/observability/top", a.requireAuth("", a.handleObsTop))
 	r.Get("/api/observability/syslog", a.requireAuth("", a.handleObsSyslog))
