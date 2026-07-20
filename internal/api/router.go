@@ -149,6 +149,25 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/wlc/{ip}/interfaces", a.requireAuth("", a.handleWLCInterfaces))
 	r.Get("/api/wlc/{ip}/diagnose-client/{mac}", a.requireAuth("", a.handleWLCDiagnoseClient))
 
+	// --- Sedi multi-sito (adm), relay comandi e job (op) ---
+	r.Get("/api/sites", a.requireAuth("admin", a.handleListSites))
+	r.Post("/api/sites", a.requireAuth("admin", a.handleCreateSite))
+	r.Post("/api/sites/update", a.requireAuth("admin", a.handleUpdateSite))
+	r.Post("/api/sites/delete", a.requireAuth("admin", a.handleDeleteSite))
+	r.Post("/api/sites/regenerate-token", a.requireAuth("admin", a.handleRegenerateSiteToken))
+	r.Post("/api/sites/{site_id}/command", a.requireAuth("operator", a.handleSiteCommand))
+	r.Get("/api/sites/{site_id}/command-jobs", a.requireAuth("operator", a.handleListSiteCommandJobs))
+	r.Get("/api/command-jobs/{job_id}", a.requireAuth("operator", a.handleGetCommandJob))
+
+	// --- Agenti di sede: autenticazione per token, NON JWT ---
+	// Il contratto di trasporto (header, forme JSON, claim dei job) è
+	// vincolante: gli agenti Python già installati parlano con queste rotte.
+	r.Post("/api/agent/heartbeat", a.handleAgentHeartbeat)
+	r.Post("/api/agent/inventory", a.handleAgentInventory)
+	r.Post("/api/agent/mac", a.handleAgentMac)
+	r.Get("/api/agent/jobs", a.handleAgentPollJobs)
+	r.Post("/api/agent/jobs/{job_id}/result", a.handleAgentJobResult)
+
 	// --- Provisioner day-0 (op): genera, scarica, applica ---
 	r.Post("/api/provisioner/generate", a.requireAuth("operator", a.handleProvisionerGenerate))
 	r.Post("/api/provisioner/download", a.requireAuth("operator", a.handleProvisionerDownload))
