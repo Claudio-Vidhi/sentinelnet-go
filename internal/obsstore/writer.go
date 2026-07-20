@@ -78,7 +78,18 @@ type Flow struct {
 func (s *Store) EnqueueFlow(f Flow) bool {
 	return s.EnqueueWrite(flowUpsertSQL,
 		s.FlowWindowStart(f.ExportTS, f.ReceiveTS), f.Tenant, f.SrcIP, f.DstIP,
-		f.Protocol, f.DstPort, f.TotalBytes, f.TotalPackets, f.ExporterIP, f.Source)
+		NullIfNegative(f.Protocol), NullIfNegative(f.DstPort),
+		f.TotalBytes, f.TotalPackets, f.ExporterIP, f.Source)
+}
+
+// NullIfNegative traduce il "campo assente" dei decoder (-1) in NULL.
+// Il Python emette None per gli stessi casi e le colonne sono nullable:
+// scrivere 0 renderebbe indistinguibile "protocollo 0" da "protocollo ignoto".
+func NullIfNegative(v int) any {
+	if v < 0 {
+		return nil
+	}
+	return v
 }
 
 // FlowWindowStart calcola il bucket al minuto di un flusso: usa il timestamp
