@@ -575,3 +575,34 @@ scrivere codice senza chiamanti; va fatto insieme al dominio D, se e quando si p
 
 Della traccia 2 resta solo l'**API poller**, bloccato sul client REST FortiGate (traccia 3):
 `poll_once` è già stubbabile senza rompere la semantica di `api_poll_s`.
+
+### 2026-07-20 — Traccia 3, passi 2-3: client REST FortiGate
+
+| Intervento | File |
+|---|---|
+| Migrazione `0007` + persistenza dei target (token cifrato col vault, un solo target attivo). | `internal/store/{fortigate.go,fortigate_test.go,migrations/0007_fortigate_targets.sql}` |
+| Client REST FortiOS v2: Bearer token, TLS opt-in, messaggi diagnostici, `GetCMDB` con proiezione, `TestConnection`. | `internal/fortigate/{client.go,client_test.go}` |
+| Funzioni di osservabilità con ripiego SSH: 16 endpoint + `apiOrSSH`. | `internal/fortigate/{observe.go,observe_test.go}` |
+
+Note di implementazione:
+
+- **Target in tabella, non in JSON**: coerente con gruppi, vendor, categorie e modelli già
+  migrati. Il token è cifrato con lo stesso vault delle password apparato.
+- **Token vuoto in aggiornamento = invariato**: rinominare un target o cambiarne la porta non
+  deve costringere a reinserire il token ("•••• invariato" lato UI).
+- **`apiOrSSH` non è un retry**: un tentativo per trasporto, come il Python. Se falliscono
+  entrambi l'errore riporta i due motivi; se la REST fallisce ma l'SSH riesce, il motivo REST
+  resta in `api_error`.
+- **`monitor/system/status` è l'eccezione**: `version` e `serial` stanno FUORI da `results`.
+  Senza fonderli la UI mostrerebbe un FortiGate senza versione.
+- **Log di traffico**: si prova prima il disco, poi la memoria — sui modelli senza disco il
+  primo tentativo fallisce sempre — e si riporta quale device ha risposto.
+- I tre messaggi d'errore (certificato non attendibile, token non valido, accprofile
+  insufficiente) sono portati alla lettera: sono la prima cosa che legge un operatore quando
+  l'integrazione non funziona.
+- I test usano un server TLS con certificato self-signed, così il percorso di verifica è
+  esercitato davvero in entrambe le direzioni.
+
+Prossimi passi della traccia 3: gli handler (25 rotte `/api/fortigate/*`, incluso il
+`fgtDevice` che riusa `assertDeviceAllowed`), poi WLC, provisioner, sedi/agent e visio export.
+Una volta pronto il client, l'**API poller** della traccia 2 si sblocca.
