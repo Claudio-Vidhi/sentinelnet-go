@@ -139,6 +139,16 @@ func (a *App) Router() http.Handler {
 	// Contiene segreti: richiede 'operator' ed è sempre in audit.
 	r.Get("/api/fortigate/{ip}/full-config", a.requireAuth("operator", a.handleFGTFullConfig))
 
+	// --- WLC: osservabilità wireless Cisco (auth read, tenant-scoped via assertDeviceAllowed) ---
+	r.Get("/api/wlc/{ip}/status", a.requireAuth("", a.handleWLCStatus))
+	r.Get("/api/wlc/{ip}/ap-summary", a.requireAuth("", a.handleWLCAPSummary))
+	r.Get("/api/wlc/{ip}/client-summary", a.requireAuth("", a.handleWLCClientSummary))
+	r.Get("/api/wlc/{ip}/client/{mac}", a.requireAuth("", a.handleWLCClientDetail))
+	r.Get("/api/wlc/{ip}/wlan-summary", a.requireAuth("", a.handleWLCWLANSummary))
+	r.Get("/api/wlc/{ip}/rogue-aps", a.requireAuth("", a.handleWLCRogueAPs))
+	r.Get("/api/wlc/{ip}/interfaces", a.requireAuth("", a.handleWLCInterfaces))
+	r.Get("/api/wlc/{ip}/diagnose-client/{mac}", a.requireAuth("", a.handleWLCDiagnoseClient))
+
 	// --- Observability (Live Flows) ---
 	r.Get("/api/observability/top", a.requireAuth("", a.handleObsTop))
 	r.Get("/api/observability/syslog", a.requireAuth("", a.handleObsSyslog))
