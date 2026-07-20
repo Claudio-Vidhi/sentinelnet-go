@@ -1,0 +1,57 @@
+{
+  "hostname": "SW-ACC-01",
+  "domain": "example.lan",
+  "role": "access",
+  "mgmt_vlan": 99,
+  "mgmt_ip": "10.0.99.10",
+  "mgmt_mask": "255.255.255.0",
+  "mgmt_gw": "10.0.99.1",
+  "admin_user": "netadmin",
+  "admin_password": "S3cr3t!",
+  "enable_secret": "En4ble!",
+  "ssh_only": true,
+  "banner": "Accesso riservato",
+  "ntp_servers": [
+    "10.0.0.1",
+    "10.0.0.2"
+  ],
+  "syslog_server": "10.0.0.5",
+  "snmpv3": {
+    "user": "snmpuser",
+    "auth_pass": "authpwd123",
+    "priv_pass": "privpwd123",
+    "group": "RO-GRP"
+  },
+  "vlans": [
+    {
+      "id": 10,
+      "name": "DATA"
+    },
+    {
+      "id": 20,
+      "name": "VOICE"
+    },
+    30
+  ],
+  "vtp_mode": "transparent",
+  "stp_mode": "rapid-pvst",
+  "bpduguard": true,
+  "port_security": true,
+  "dhcp_snooping": true,
+  "dhcp_snooping_vlans": "10,20",
+  "cdp_enabled": true,
+  "lldp_enabled": false,
+  "access_ports": [
+    "GigabitEthernet1/0/1-24"
+  ],
+  "access_vlan": 10,
+  "trunk_ports": [
+    "GigabitEthernet1/0/47-48"
+  ],
+  "trunk_allowed_vlans": "10,20,30",
+  "uplink_pc_id": 1,
+  "login_block": true,
+  "storm_control": true,
+  "errdisable_recovery": true,
+  "no_vstack": true
+}

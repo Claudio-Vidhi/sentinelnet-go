@@ -1,0 +1,19 @@
+{
+  "hostname": "SW-TAC",
+  "aaa_protocol": "tacacs",
+  "aaa_servers": [
+    {
+      "ip": "10.0.0.20",
+      "key": "tackey"
+    }
+  ],
+  "ssh_only": false,
+  "bpduguard": false,
+  "login_block": false,
+  "errdisable_recovery": false,
+  "no_vstack": false,
+  "cdp_enabled": false,
+  "lldp_enabled": false,
+  "vtp_mode": "server",
+  "stp_mode": "mst"
+}

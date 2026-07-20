@@ -1,0 +1,131 @@
+no service pad
+service password-encryption
+service timestamps debug datetime msec localtime
+service timestamps log datetime msec localtime
+service tcp-keepalives-in
+service tcp-keepalives-out
+!
+hostname SW-ACC-01
+!
+no ip domain-lookup
+ip domain-name example.lan
+no ip http server
+no ip http secure-server
+no vstack
+!
+! --- AUTENTICAZIONE LOCALE / ENABLE ---
+enable secret En4ble!
+username netadmin privilege 15 secret S3cr3t!
+aaa new-model
+aaa authentication login default local
+aaa authorization exec default local
+login block-for 120 attempts 5 within 60
+login on-failure log
+login on-success log
+!
+! --- SSH-ONLY MANAGEMENT ---
+crypto key generate rsa modulus 2048
+ip ssh version 2
+ip ssh time-out 60
+ip ssh authentication-retries 3
+!
+! --- VTP ---
+vtp mode transparent
+!
+! --- VLAN DATABASE ---
+vlan 10
+ name DATA
+vlan 20
+ name VOICE
+vlan 30
+ name VLAN30
+!
+! --- INTERFACCIA DI MANAGEMENT ---
+interface Vlan99
+ ip address 10.0.99.10 255.255.255.0
+ no shutdown
+exit
+ip default-gateway 10.0.99.1
+!
+! --- SPANNING-TREE ---
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+spanning-tree portfast bpduguard default
+!
+! --- ERRDISABLE AUTO-RECOVERY ---
+errdisable recovery cause bpduguard
+errdisable recovery cause psecure-violation
+errdisable recovery cause storm-control
+errdisable recovery interval 300
+!
+! --- DHCP SNOOPING ---
+ip dhcp snooping
+ip dhcp snooping vlan 10,20
+no ip dhcp snooping information option
+!
+! --- CDP / LLDP ---
+cdp run
+no lldp run
+!
+! --- PORTE ACCESS (EDGE) ---
+interface range GigabitEthernet1/0/1-24
+ switchport mode access
+ switchport access vlan 10
+ switchport nonegotiate
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security violation restrict
+ switchport port-security aging time 2
+ switchport port-security aging type inactivity
+ storm-control broadcast level 5.00
+ storm-control action trap
+ ip dhcp snooping limit rate 15
+ no shutdown
+exit
+!
+! --- PORTE TRUNK (UPLINK) ---
+interface range GigabitEthernet1/0/47-48
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30
+ switchport nonegotiate
+ ip dhcp snooping trust
+ channel-group 1 mode active
+ no shutdown
+exit
+interface Port-channel1
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30
+ switchport nonegotiate
+ ip dhcp snooping trust
+ no shutdown
+exit
+!
+! --- BANNER ---
+banner motd ^CAccesso riservato^C
+!
+! --- NTP ---
+ntp server 10.0.0.1
+ntp server 10.0.0.2
+!
+! --- LOGGING ---
+logging buffered 16384
+logging host 10.0.0.5
+logging trap informational
+logging source-interface Vlan99
+!
+! --- SNMPv3 ---
+snmp-server group RO-GRP v3 priv
+snmp-server user snmpuser RO-GRP v3 auth sha authpwd123 priv aes 128 privpwd123
+!
+! --- HARDENING VTY / CONSOLE ---
+line con 0
+ login local
+ exec-timeout 5 0
+line vty 0 15
+ login local
+ exec-timeout 5 0
+ transport input ssh
+!
+end

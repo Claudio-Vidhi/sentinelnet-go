@@ -1,0 +1,49 @@
+no service pad
+service password-encryption
+service timestamps debug datetime msec localtime
+service timestamps log datetime msec localtime
+service tcp-keepalives-in
+service tcp-keepalives-out
+!
+hostname SW-TAC
+!
+no ip domain-lookup
+no ip http server
+no ip http secure-server
+!
+! --- AUTENTICAZIONE LOCALE / ENABLE ---
+aaa new-model
+!
+! --- AAA TACACS+ ---
+tacacs server TACACS-1
+ address ipv4 10.0.0.20
+ key tackey
+aaa group server tacacs+ SENTINEL-AAA
+ server name TACACS-1
+aaa authentication login default group SENTINEL-AAA local
+aaa authorization exec default group SENTINEL-AAA local
+!
+! --- VTP ---
+vtp mode server
+!
+! --- SPANNING-TREE ---
+spanning-tree mode mst
+spanning-tree extend system-id
+!
+! --- CDP / LLDP ---
+no cdp run
+no lldp run
+!
+! --- LOGGING ---
+logging buffered 16384
+!
+! --- HARDENING VTY / CONSOLE ---
+line con 0
+ login local
+ exec-timeout 5 0
+line vty 0 15
+ login local
+ exec-timeout 5 0
+ transport input ssh telnet
+!
+end
