@@ -162,3 +162,29 @@ che la sta aspettando.
 snapshot in `api_observations`, e il contesto dell'assistente AI su
 quell'apparato è più povero. Nessuna funzione interattiva è degradata.
 
+
+---
+
+## 9. `/api/settings/app` espone solo le chiavi che il Go onora davvero
+
+**Python** (`routers/settings.py`): la rotta gestisce otto chiavi — `port`,
+`ssl_certfile`, `ssl_keyfile`, `cors_origins`, `no_browser` e le tre finestre di
+retention dell'osservabilità.
+
+**Go** (`internal/api/settings_handlers.go`): ne espone una, `port`. Le altre sono
+rifiutate con `400 Invalid key: '<chiave>'`.
+
+**Motivo**: il server Go non implementa TLS, CORS né l'apertura del browser.
+Accettare `ssl_certfile` significherebbe far impostare un certificato a un operatore
+che poi non ottiene HTTPS: un campo che mente è peggio di un campo assente, e il
+rifiuto esplicito glielo dice subito invece di lasciarglielo scoprire quando l'HTTPS
+non parte. Le tre finestre di retention **esistono** in Go, ma appartengono alla
+configurazione dell'osservabilità (`/api/observability/config`), che è dove la UI le
+modifica: duplicarle qui creerebbe due sorgenti per lo stesso valore.
+
+`port` è invece onorato davvero: `ResolveListenAddr` lo legge all'avvio con la
+precedenza env `SENTINELNET_PORT` > valore salvato > 8000, ed è coperto da test.
+
+**Effetto**: il pannello "impostazioni avanzate" mostra il solo campo porta. Se in
+futuro il Go acquisisce TLS e CORS, le chiavi vanno riaperte qui insieme alla
+funzione — non prima.

@@ -65,12 +65,18 @@ func resolveBindHost(getSetting func(key, def string) string) string {
 // ResolveListenAddr calcola l'indirizzo host:porta di ascolto all'avvio,
 // rispettando la precedenza di resolve_bind_host() in Python: env
 // SENTINELNET_HOST > host persistito nelle impostazioni > "127.0.0.1".
-// La porta segue SENTINELNET_PORT (default 8000).
+// La porta segue la stessa precedenza: env SENTINELNET_PORT > porta
+// persistita da /api/settings/app > 8000. L'ambiente vince perché è il modo in
+// cui si forza la porta in un container o in un servizio, e non deve dipendere
+// dal contenuto del database.
 func (a *App) ResolveListenAddr() string {
 	host := resolveBindHost(a.store.GetSetting)
-	port := "8000"
-	if p := os.Getenv("SENTINELNET_PORT"); p != "" {
-		port = p
+	port := os.Getenv("SENTINELNET_PORT")
+	if port == "" {
+		port = a.store.GetSetting(appPortSettingKey, "")
+	}
+	if port == "" {
+		port = strconv.Itoa(defaultAppPort)
 	}
 	return host + ":" + port
 }
@@ -224,4 +230,108 @@ func (a *App) handleSetFortigatePreviewSettings(w http.ResponseWriter, r *http.R
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status": "success", "fortigate_preview": req.Enabled,
 	})
+}
+
+// Impostazioni applicazione avanzate: GET/POST /api/settings/app.
+//
+// Il Python espone otto chiavi (porta, TLS, CORS, no_browser e le tre finestre
+// di retention). Qui se ne espone solo il sottoinsieme che il binario Go
+// onora davvero:
+//
+//   - TLS, CORS e no_browser non sono implementati nel server Go. Restituirli
+//     produrrebbe un form in cui l'operatore imposta un certificato e non
+//     ottiene HTTPS: un campo che mente è peggio di un campo assente.
+//   - le finestre di retention esistono, ma appartengono alla configurazione
+//     dell'osservabilità (/api/observability/config), che è dove la UI le
+//     modifica. Duplicarle qui creerebbe due sorgenti per lo stesso valore.
+//
+// Resta quindi la porta, che ResolveListenAddr legge davvero all'avvio.
+// Divergenza documentata in DIVERGENZE-DAL-PYTHON.md §9.
+const (
+	appPortSettingKey = "app_port"
+	defaultAppPort    = 8000
+)
+
+// handleGetAppSettings: GET /api/settings/app.
+func (a *App) handleGetAppSettings(w http.ResponseWriter, r *http.Request) {
+	dataDir := ""
+	if a.cfg != nil {
+		dataDir = a.cfg.DataDir
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"settings":      a.appSettings(),
+		"env_overrides": map[string]bool{"port": os.Getenv("SENTINELNET_PORT") != ""},
+		"defaults":      map[string]any{"port": defaultAppPort},
+		"data_dir":      dataDir,
+	})
+}
+
+// handleSetAppSettings: POST /api/settings/app.
+//
+// Una chiave non gestita è rifiutata con 400 invece di essere ignorata in
+// silenzio: se la UI prova a impostare un certificato TLS, l'operatore deve
+// sapere che non è stato salvato, non scoprirlo quando l'HTTPS non parte.
+func (a *App) handleSetAppSettings(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	var req map[string]any
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+
+	for k, v := range req {
+		if k != "port" {
+			writeErr(w, http.StatusBadRequest, "Invalid key: '"+k+"'.")
+			return
+		}
+		// null o stringa vuota: si torna al default, cioè si rimuove il valore.
+		if v == nil || v == "" {
+			if err := a.store.SetSetting(appPortSettingKey, ""); err != nil {
+				writeErr(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			continue
+		}
+		port, ok := toInt(v)
+		if !ok || port < 1 || port > 65535 {
+			writeErr(w, http.StatusBadRequest, "Invalid port (1-65535).")
+			return
+		}
+		if err := a.store.SetSetting(appPortSettingKey, strconv.Itoa(port)); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	a.auditLog("Impostazioni applicazione aggiornate da '" + claims.Username +
+		"' (riavvio richiesto).")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":           "success",
+		"restart_required": true,
+		"settings":         a.appSettings(),
+	})
+}
+
+// appSettings è lo stato corrente delle impostazioni gestite.
+func (a *App) appSettings() map[string]any {
+	out := map[string]any{}
+	if v := a.store.GetSetting(appPortSettingKey, ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			out["port"] = n
+		}
+	}
+	return out
+}
+
+// toInt accetta i numeri JSON (float64) e le stringhe numeriche, come fa il
+// Python con int(v).
+func toInt(v any) (int, bool) {
+	switch t := v.(type) {
+	case float64:
+		return int(t), t == float64(int(t))
+	case string:
+		n, err := strconv.Atoi(strings.TrimSpace(t))
+		return n, err == nil
+	}
+	return 0, false
 }

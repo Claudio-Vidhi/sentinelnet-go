@@ -200,3 +200,99 @@ func TestFortigatePreviewDefaultsOff(t *testing.T) {
 		t.Errorf("stato dopo l'attivazione = %v", got)
 	}
 }
+
+// La porta impostata da /api/settings/app deve essere davvero letta all'avvio,
+// altrimenti sarebbe un campo che mente.
+func TestAppSettingsPortIsHonouredAtStartup(t *testing.T) {
+	app, _ := testFGTApp(t)
+	t.Setenv("SENTINELNET_PORT", "")
+	t.Setenv("SENTINELNET_HOST", "")
+
+	if addr := app.ResolveListenAddr(); !strings.HasSuffix(addr, ":8000") {
+		t.Errorf("addr di default = %q, attesa la porta 8000", addr)
+	}
+
+	req := httptest.NewRequest("POST", "/api/settings/app", strings.NewReader(`{"port":9443}`))
+	req = withIPParam(req, "", adminClaims)
+	rec := httptest.NewRecorder()
+	app.handleSetAppSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	if addr := app.ResolveListenAddr(); !strings.HasSuffix(addr, ":9443") {
+		t.Errorf("addr = %q, la porta salvata non viene letta all'avvio", addr)
+	}
+}
+
+// L'ambiente vince sul valore salvato: è il modo in cui si forza la porta in
+// un container, e non deve dipendere dal database.
+func TestAppSettingsEnvWinsOverStoredPort(t *testing.T) {
+	app, st := testFGTApp(t)
+	if err := st.SetSetting(appPortSettingKey, "9443"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SENTINELNET_PORT", "7000")
+	t.Setenv("SENTINELNET_HOST", "")
+
+	if addr := app.ResolveListenAddr(); !strings.HasSuffix(addr, ":7000") {
+		t.Errorf("addr = %q, l'ambiente deve vincere", addr)
+	}
+}
+
+// Una chiave che il Go non onora è rifiutata invece di essere ignorata: se la
+// UI prova a impostare un certificato TLS, l'operatore deve saperlo subito.
+func TestAppSettingsRejectsUnsupportedKeys(t *testing.T) {
+	app, _ := testFGTApp(t)
+	for _, body := range []string{
+		`{"ssl_certfile":"/etc/cert.pem"}`,
+		`{"cors_origins":"*"}`,
+		`{"no_browser":true}`,
+		`{"retention_flows_days":10}`,
+	} {
+		req := httptest.NewRequest("POST", "/api/settings/app", strings.NewReader(body))
+		req = withIPParam(req, "", adminClaims)
+		rec := httptest.NewRecorder()
+		app.handleSetAppSettings(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("body %s -> status %d, atteso 400", body, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "Invalid key") {
+			t.Errorf("body %s -> messaggio %q", body, rec.Body.String())
+		}
+	}
+}
+
+func TestAppSettingsValidatesPortRange(t *testing.T) {
+	app, _ := testFGTApp(t)
+	for _, body := range []string{`{"port":0}`, `{"port":70000}`, `{"port":-1}`, `{"port":"abc"}`} {
+		req := httptest.NewRequest("POST", "/api/settings/app", strings.NewReader(body))
+		req = withIPParam(req, "", adminClaims)
+		rec := httptest.NewRecorder()
+		app.handleSetAppSettings(rec, req)
+		if rec.Code != http.StatusBadRequest {
+			t.Errorf("body %s -> status %d, atteso 400", body, rec.Code)
+		}
+	}
+}
+
+// Valore vuoto: si torna al default, cioè la porta salvata viene rimossa.
+func TestAppSettingsEmptyValueResetsToDefault(t *testing.T) {
+	app, st := testFGTApp(t)
+	if err := st.SetSetting(appPortSettingKey, "9443"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SENTINELNET_PORT", "")
+	t.Setenv("SENTINELNET_HOST", "")
+
+	req := httptest.NewRequest("POST", "/api/settings/app", strings.NewReader(`{"port":""}`))
+	req = withIPParam(req, "", adminClaims)
+	rec := httptest.NewRecorder()
+	app.handleSetAppSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if addr := app.ResolveListenAddr(); !strings.HasSuffix(addr, ":8000") {
+		t.Errorf("addr = %q, atteso il ritorno al default", addr)
+	}
+}
