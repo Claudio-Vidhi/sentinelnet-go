@@ -694,3 +694,43 @@ Note di implementazione:
 
 Prossimi passi: 8 `secrets.go`, 9 push SSH/seriale (unica dipendenza nuova prevista,
 `go.bug.st/serial`), 10 `provision/fortigate.go`, 11 handler provisioner, poi sedi/agent.
+
+### 2026-07-20 — Traccia 3, passi 8-10: segreti, consegna e provisioner FortiGate
+
+| Intervento | File |
+|---|---|
+| Mascheramento dei segreti nel payload del wizard (finding I-2). | `internal/provision/{secrets.go,secrets_test.go}` |
+| Consegna via SSH e console seriale, elenco porte COM. | `internal/provision/{push.go,push_test.go}` |
+| `Credentials.Port` per il day-0 su porta SSH non standard. | `internal/collect/ssh.go` |
+| Generazione config day-0 FortiOS. | `internal/provision/{fortigate.go,fortigate_test.go}` |
+| Golden dal Python per mascheramento e FortiGate. | `internal/provision/testdata/{secrets,fortigate}/` |
+
+Note di implementazione:
+
+- **Il mascheramento lavora sul payload generico**, non sulla struct tipizzata: è lo stesso
+  `map[string]any` che il Python maschera, vale per entrambi i provisioner senza elencarne i
+  campi, e un campo nuovo aggiunto domani è coperto per costruzione. Il percorso nei
+  placeholder non è indicizzato per le liste (`{{VAULT:aaa_servers.key}}` per ogni elemento):
+  comportamento del Python, verificato eseguendolo.
+- **`go.bug.st/serial` è l'unica dipendenza nuova** prevista da §6, ed è puro Go: il binario
+  statico senza CGO continua a compilare (verificato, ~20 MB).
+- **`serialScript` è separata dall'I/O**: senza hardware è l'unica parte testabile del
+  percorso seriale, ed è quella che conta, perché su una console non c'è prompt-matching e i
+  comandi vanno a tempo.
+- **I flag con default True restano `*bool`** in entrambi i provisioner. Sul FortiGate sono
+  cinque (`strong_crypto`, `lockout`, `disable_wan_admin`, `rest_api_logging`,
+  `lan_to_wan_policy`) e un `bool` semplice avrebbe disattivato in silenzio la crittografia
+  forte e la chiusura dell'accesso admin dal WAN su un firewall esposto.
+- **Nessun rollback** in nessuno dei due percorsi di consegna (§7.4).
+
+Difetto trovato e corretto: il test golden delle config glob-a `testdata/*.json`, e le
+fixture del mascheramento aggiunte lì non avevano un `.txt` corrispondente. Ora le fixture
+stanno in sottocartelle. Era sfuggito perché dopo quel commit erano stati eseguiti solo i
+test del mascheramento e non l'intero package — il test funzionava, non era stato lanciato.
+
+Verifica: build statico, `go vet` e `go test ./...` verdi su 16 package. I golden FortiGate
+sono stati rigenerati dal Python e confrontati dopo l'implementazione, per escludere che
+fossero stati adattati al codice invece del contrario.
+
+Prossimi passi: 11 handler provisioner (`/api/provisioner/*`), poi 12-13 `site/` + sedi/agent,
+visio export, analizzatori firewall, MCP + AI e il difetto D5.
