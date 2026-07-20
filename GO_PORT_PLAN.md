@@ -507,5 +507,41 @@ Note di implementazione:
 Verifica: build, `go vet` e `go test ./...` verdi; fuzzing ~4,5 M esecuzioni su sFlow e
 ~700 k su NetFlow/IPFIX (con decoder condiviso, per esercitare l'accumulo di stato) senza crash.
 
-Restano della traccia 2: `udp.go` (trasporto e attribuzione tenant), `manager.go`, `rollup.go`,
-`correlator.go`, `summary.go`, gli handler HTTP e il wiring in `main.go`.
+### 2026-07-20 — Traccia 2, passi 5-7 e 11-13: pipeline completa e raggiungibile
+
+| Intervento | File |
+|---|---|
+| Trasporto UDP: goroutine lettore + consumer per listener, coda limitata con drop, attribuzione tenant, quarantena degli exporter sconosciuti con audit limitato a una voce/ora. | `internal/observability/ingest/{udp.go,udp_test.go}` |
+| Manager: `Apply` idempotente con diff e stop-before-start, stato dei listener, bind falliti non bloccanti, loop di retention, `Shutdown`. | `internal/observability/{config.go,manager.go,manager_test.go}` |
+| Sink verso il writer + risolutore tenant con cache TTL 60s. | `internal/observability/sink.go` |
+| Retention batchata via rowid; eventi correlati aperti mai eliminati. | `internal/obsstore/{rollup.go,rollup_test.go}` |
+| Query per top talker, syslog, anomalie, transizione di stato, api-context. | `internal/obsstore/queries.go` |
+| 8 rotte `/api/observability/*` + configurazione persistita e applicata a caldo. | `internal/api/{observability_handlers.go,router.go}` |
+| Wiring nel ciclo di vita del processo. | `cmd/sentinelnet/main.go`, `internal/api/api.go` |
+
+Note di implementazione:
+
+- **L'osservabilità è opzionale**: se `observability.db` non si apre, l'applicazione parte
+  comunque e gli endpoint rispondono 503. È un di più, non una funzione essenziale.
+- **Cache del risolutore tenant**: la risoluzione IP→tenant avviene per ogni record
+  decodificato, cioè migliaia di volte al secondo sotto carico. Senza cache ogni flusso
+  costerebbe una query su SQLite in contesa con il writer. Il Python invalida la cache a
+  ogni scrittura dell'inventario; qui un TTL di 60s ottiene lo stesso effetto pratico senza
+  agganciarsi a tutti i punti di scrittura.
+- **Transizione di stato delle anomalie**: la `UPDATE` include lo stato di partenza, così
+  due operatori simultanei non si sovrascrivono in silenzio (il secondo riceve 409). Un
+  evento fuori scope ritorna 404 come uno inesistente, per non confermarne l'esistenza.
+  Nota: il Python risponde **409** (non 400) a una transizione non ammessa — si è seguito
+  il codice, non il riassunto in §5.A.
+- Il manager è costruito dentro il package `api` (`EnableObservability`) per non esporre
+  il logger di audit.
+
+Verifica: oltre a build/vet/test, il binario è stato eseguito davvero — registrazione admin,
+rifiuto di una password da 6 caratteri, attivazione a caldo del listener syslog, invio di due
+datagrammi reali (Cisco con timestamp BSD e FortiGate key=value) e rilettura via API con
+tenant attribuito, severità e azione corrette. Due test end-to-end coprono lo stesso percorso
+in automatico, incluso l'exporter sconosciuto che finisce in quarantena senza scrivere nulla.
+
+Restano della traccia 2: `flowgraph` (dipende dall'arricchimento VLAN da `arp_entries`, già
+disponibile), `correlator.go`, `summary.go`, e l'API poller (dipende dal client REST FortiGate,
+traccia 3).
