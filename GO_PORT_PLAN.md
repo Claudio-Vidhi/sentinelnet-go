@@ -542,6 +542,36 @@ datagrammi reali (Cisco con timestamp BSD e FortiGate key=value) e rilettura via
 tenant attribuito, severità e azione corrette. Due test end-to-end coprono lo stesso percorso
 in automatico, incluso l'exporter sconosciuto che finisce in quarantena senza scrivere nulla.
 
-Restano della traccia 2: `flowgraph` (dipende dall'arricchimento VLAN da `arp_entries`, già
-disponibile), `correlator.go`, `summary.go`, e l'API poller (dipende dal client REST FortiGate,
-traccia 3).
+### 2026-07-20 — Traccia 2, passi 9 e 11: flowgraph e correlatore
+
+| Intervento | File |
+|---|---|
+| `GET /api/observability/flowgraph`: nodi/archi con tassi, KPI, riepilogo tenant, ripartizione protocolli. VLAN reale da `arp_entries` con ripiego sintetico dichiarato. | `internal/api/{flowgraph.go,flowgraph_test.go}` |
+| `VlansForIPs` con lookup per `(ip, tenant)`. | `internal/store/arp.go` |
+| Query per grafo e conteggio anomalie aperte. | `internal/obsstore/queries.go` |
+| Correlatore: eventi syslog × flussi × posizione fisica → `correlated_events`, con ciclo periodico. | `internal/observability/{correlator.go,correlator_test.go,manager.go}` |
+
+Note di implementazione:
+
+- **La VLAN sintetica non è un dato falso silenzioso**: quando manca il binding ARP il nodo
+  è marcato `vlan_real: false`, così la UI può segnalarlo. Il valore usa sha1 troncato e non
+  una hash arbitraria perché deve restare stabile fra riavvii: altrimenti lo stesso tenant
+  cambierebbe VLAN, e quindi colore nel grafo, a ogni restart.
+- **I byte di un nodo sommano src e dst**: un host solo-destinazione (un server interno mai
+  visto come sorgente) resterebbe altrimenti a zero e verrebbe scartato dal taglio ai primi 50.
+- Il flowgraph interroga **entrambi i database**: flussi da `observability.db`, binding ARP
+  da `sentinelnet.db`.
+- Il correlatore è il primo punto in cui i domini portati si incontrano davvero:
+  l'arricchimento switch/porta usa la Client Map della traccia 1.
+- **Chiave di deduplicazione**: la tupla del flusso replica la rappresentazione Python, così
+  un database condiviso fra le due implementazioni non genererebbe doppioni.
+
+Verifica: 9 test sul flowgraph e 8 sul correlatore, inclusi i due casi di isolamento fra
+tenant (VLAN di un'altra sede nel grafo; flusso di un altro tenant che "conferma" un evento).
+
+**`summary.go` non è stato portato di proposito**: il suo unico consumatore è il contesto
+dell'assistente AI, che §5.D raccomanda di stubbare in v1. Portarlo ora significherebbe
+scrivere codice senza chiamanti; va fatto insieme al dominio D, se e quando si porta.
+
+Della traccia 2 resta solo l'**API poller**, bloccato sul client REST FortiGate (traccia 3):
+`poll_once` è già stubbabile senza rompere la semantica di `api_poll_s`.
