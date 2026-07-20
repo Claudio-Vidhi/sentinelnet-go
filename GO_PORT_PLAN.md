@@ -477,6 +477,35 @@ scrittura/lettura.
 Con questo la parità MAC/ARP con il Python è completa, tranne i livelli NETCONF/RESTCONF
 volutamente rimandati (§5.B, punto 10).
 
-Prossimo passo naturale: traccia 2 (observability), che non è bloccata da nulla — gli stub per
-`switchPortFor` e per l'API poller reggono finché le tracce 1 e 3 non atterrano. In alternativa
-la traccia 1 prosegue con `internal/fwanalyzer` (passi 5-7).
+### 2026-07-20 — Traccia 2, passi 1-4: fondamenta observability e decoder
+
+| Intervento | File |
+|---|---|
+| `obsstore`: database separato, migrazione verbatim di `schema.sql`, writer a goroutine singola con commit a batch (500), `EnqueueWrite`/`EnqueueFlow`, `FlowWindowStart`, `Sync`, `Close` che svuota la coda. | `internal/obsstore/{store.go,writer.go,writer_test.go,migrations/0001_observability_init.sql}` |
+| Registro metriche thread-safe (contatori, gauge, `ShouldWarn` rate-limited). | `internal/observability/metrics/` |
+| Decoder syslog (RFC 3164/5424 + normalizzazione FortiGate e Palo Alto). | `internal/observability/ingest/{syslog.go,syslog_test.go}` |
+| Decoder sFlow v5 (solo flow sample; counter sample contati e saltati). | `internal/observability/ingest/{sflow.go,sflow_test.go}` |
+| Decoder NetFlow v5/v9 + IPFIX con cache template, TTL, eviction e buffer dei set in attesa. | `internal/observability/ingest/{ipfix.go,ipfix_test.go}` |
+| Target di fuzzing per i tre decoder. | `internal/observability/ingest/fuzz_test.go` |
+
+Note di implementazione:
+
+- **Niente thread dedicato per l'ingest**: come previsto in §5.A, il workaround del GIL
+  (event loop su thread separato + `sys.setswitchinterval`) non serve in Go.
+- **Stato dei template in una struct, non in variabili di modulo**: più listener condividono
+  il decoder, e lo stato globale mutabile del Python sarebbe una race in Go.
+- **Bounds checking esplicito a ogni offset**: `encoding/binary` non tollera i buffer corti
+  come lo slicing Python. Un panic nella goroutine di un listener terminerebbe il processo,
+  quindi i test di troncamento e il fuzzing sono il presidio principale (rischio **R2** della
+  lista decoder, cioè la parità binaria sotto input malformato).
+- I decoder restano **funzioni pure**: i conteggi (`counter_samples_skipped`, `parse_errors`,
+  `data_before_template_dropped`) sono restituiti al chiamante invece di scrivere su un
+  registro globale, così sono testabili senza dipendenze.
+- `Protocol`/`DstPort` valgono `-1` dove il Python emette `None`: la conversione a NULL
+  avviene nel wiring di ingest, non nel decoder.
+
+Verifica: build, `go vet` e `go test ./...` verdi; fuzzing ~4,5 M esecuzioni su sFlow e
+~700 k su NetFlow/IPFIX (con decoder condiviso, per esercitare l'accumulo di stato) senza crash.
+
+Restano della traccia 2: `udp.go` (trasporto e attribuzione tenant), `manager.go`, `rollup.go`,
+`correlator.go`, `summary.go`, gli handler HTTP e il wiring in `main.go`.
