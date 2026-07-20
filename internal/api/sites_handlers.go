@@ -166,15 +166,20 @@ func (a *App) handleSiteCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	claims := claimsFrom(r.Context())
-	// La blacklist vale per tutti, admin compresi: vedi divergenza §9. Un
-	// comando distruttivo relayato è eseguito da un agente su un apparato
-	// remoto, dove nessuno è in sala macchine a rimediare.
-	if !isCommandSafe(req.Command) {
+	if !a.commandAllowed(req.Command, claims) {
 		a.auditLog("Relay comando bloccato (blacklist) '" + req.Command + "' su '" + req.IP +
 			"' sede '" + siteID + "' da '" + claims.Username + "'.")
 		writeErr(w, http.StatusBadRequest,
 			"Comando non consentito per motivi di sicurezza (in blacklist).")
 		return
+	}
+	// Un comando distruttivo relayato è eseguito da un agente su un apparato
+	// remoto, dove nessuno è in sala macchine a rimediare: se qualcuno lo
+	// autorizza, deve restare scritto chi e perché.
+	if !isCommandSafe(req.Command) {
+		a.auditLog("Relay comando in blacklist '" + req.Command + "' su '" + req.IP +
+			"' sede '" + siteID + "' consentito a '" + claims.Username + "' " +
+			bypassNote(claims) + ".")
 	}
 
 	job, err := a.store.EnqueueJob(siteID, req.IP, req.Command, claims.Username)

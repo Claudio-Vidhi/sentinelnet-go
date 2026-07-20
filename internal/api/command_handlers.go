@@ -46,6 +46,20 @@ func (a *App) handleBulkCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Guard di sicurezza: nessun comando distruttivo, in qualsiasi modalità e
+	// per nessun ruolo. Qui il comando parte verso decine di apparati insieme,
+	// quindi un errore non si ferma al primo.
+	for _, c := range commands {
+		if isBulkCommandAllowed(c) {
+			continue
+		}
+		a.auditLog("Invio massivo bloccato: comando distruttivo '" + c +
+			"' richiesto dall'utente '" + claims.Username + "'.")
+		writeErr(w, http.StatusBadRequest,
+			"Comando non consentito per motivi di sicurezza (in blacklist).")
+		return
+	}
+
 	var targets []*store.Device
 	for _, ip := range req.IPs {
 		d, err := a.store.GetDevice(ip)
@@ -129,11 +143,17 @@ func (a *App) handleSendCommand(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "payload non valido")
 		return
 	}
-	if !isCommandSafe(req.Command) {
+	if !a.commandAllowed(req.Command, claims) {
 		a.auditLog("Tentativo bloccato di esecuzione comando non sicuro '" + req.Command +
 			"' su '" + req.IP + "' dall'utente '" + claims.Username + "'.")
 		writeErr(w, http.StatusBadRequest, "Comando non consentito per motivi di sicurezza (in blacklist).")
 		return
+	}
+	// Consentito ma in blacklist: chi ha bypassato, e perché, deve restare
+	// scritto. È l'unica traccia di un comando distruttivo autorizzato.
+	if !isCommandSafe(req.Command) {
+		a.auditLog("Comando in blacklist '" + req.Command + "' su '" + req.IP +
+			"' consentito a '" + claims.Username + "' " + bypassNote(claims) + ".")
 	}
 
 	d, ok := a.assertDeviceAllowed(w, r, req.IP)

@@ -162,25 +162,3 @@ che la sta aspettando.
 snapshot in `api_observations`, e il contesto dell'assistente AI su
 quell'apparato è più povero. Nessuna funzione interattiva è degradata.
 
----
-
-## 9. Blacklist CLI: nessun bypass per gli admin
-
-**Python** (`routers/commands.py`, `command_allowed`, audit M-1): gli admin bypassano
-sempre la blacklist dei comandi CLI; gli operatori vi sono soggetti solo se
-l'impostazione `cli_blacklist_operators` è attiva (default: attiva).
-
-**Go** (`internal/api/command_safety.go`): la blacklist vale per tutti, sempre.
-Non esistono né il bypass admin né l'impostazione.
-
-**Motivo**: la divergenza **era già presente** in `handleSendCommand`, portato in
-precedenza, ma non era annotata — quindi era un difetto, non una scelta. Viene
-regolarizzata qui e non "corretta" perché la direzione è quella sicura (fail closed):
-la blacklist copre `reload`, `erase`, `format`, `delete` e la scrittura della
-startup-config, e nel relay verso una sede agent il comando è eseguito da un processo
-remoto su un apparato dove nessuno è in sala macchine a rimediare.
-
-**Effetto**: un admin che nel Python può relayare `reload` verso una sede, in Go
-riceve 400 e una riga di audit. Va deciso dagli stakeholder se ripristinare il bypass;
-finché non è deciso, l'impostazione `cli_blacklist_operators` non ha alcun effetto in
-Go e la UI che la mostra sta descrivendo un comportamento che non esiste.
