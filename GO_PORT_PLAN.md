@@ -640,3 +640,33 @@ richiede cgo e gcc non è installato.
 
 Resta della traccia 3: WLC, provisioner, sedi/agent, visio export. Poi gli analizzatori
 firewall (fortios/panos), MCP + AI e il difetto D5 (`allowed_tabs`).
+
+### 2026-07-20 — Traccia 3, passo 5: WLC Cisco
+
+| Intervento | File |
+|---|---|
+| Logica di piattaforma AireOS / Catalyst 9800: mappa servizio→comando, `NormalizeMAC`, diagnosi aggregata. Package puro, trasporto iniettato come `Runner`. | `internal/wlc/{wlc.go,wlc_test.go}` |
+| 8 rotte `/api/wlc/*` con sessione SSH riusata per richiesta. | `internal/api/{wlc_handlers.go,wlc_handlers_test.go,router.go}` |
+
+Note di implementazione:
+
+- **`PagingCommand` è per piattaforma**: AireOS non conosce `terminal length 0`, che è
+  esattamente ciò che `collect.Dial` invia a tutti. Senza `config paging disable` un
+  `show client summary` su un controller carico si ferma al primo `--More--` e restituisce
+  la prima schermata come se fosse l'elenco completo — un errore silenzioso, il peggior tipo.
+- **Sessione SSH riusata per richiesta**: il Python riapre la connessione a ogni comando, e
+  una diagnosi ne esegue quattro. Stesso risultato, un quarto degli handshake; non è una
+  divergenza di comportamento e non è annotata come tale.
+- **`NormalizeMAC` è severa**: `internal/mac.NormalizeMac` ritorna l'input invariato quando
+  non è un MAC (divergenza §5), e qui un MAC malformato finirebbe in una riga di comando.
+  I test verificano che in quel caso nessun comando venga eseguito.
+- **`promptRe` non riconosce il prompt AireOS** (`(Cisco Controller) >`, con lo spazio prima
+  del `>`): `detectPrompt` ricade sull'ultima riga non vuota, che in pratica funziona. Va
+  verificato sul campo insieme al prompt FortiOS, già annotato in d35c975.
+
+Verifica: build, `go vet` e `go test ./...` verdi; 11 test sul package `wlc` e 4 sugli
+handler. Gli handler non sono testabili contro un WLC reale, quindi i test coprono il
+gating (vendor, 404, 502) e il fatto che la diagnosi risponda 200 anche con SSH assente.
+
+Resta della traccia 3: provisioner (FortiGate e switch), sedi/agent, visio export. Poi gli
+analizzatori firewall (fortios/panos), MCP + AI e il difetto D5 (`allowed_tabs`).
