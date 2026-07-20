@@ -767,3 +767,42 @@ handler del provisioner.
 **Il provisioning è completo** (passi 7-11). Prossimi passi: 12-13 `site/` + tabelle e le
 rotte sedi/agent (`site_agent.py` non va portato: solo le rotte riceventi, vedi §5.C), poi
 visio export, analizzatori firewall (fortios/panos), MCP + AI e il difetto D5.
+
+### 2026-07-20 — Traccia 3, passi 12-13: sedi multi-sito e agenti
+
+| Intervento | File |
+|---|---|
+| Migrazione 0008: tabelle `sites` e `command_jobs`, con la sede 'central' precaricata. | `internal/store/migrations/0008_sites_jobs.sql` |
+| CRUD sedi, token hashato, autenticazione a tempo costante. | `internal/store/{sites.go,sites_test.go}` |
+| Coda dei job: enqueue, claim transazionale, completamento con verifica di sede. | `internal/store/{jobs.go,jobs_test.go}` |
+| Migrazione 0009: colonna `site` sugli avvistamenti MAC. | `internal/store/migrations/0009_mac_site.sql` |
+| 8 rotte sedi/job + 5 rotte agente. | `internal/api/{sites_handlers.go,agent_handlers.go,agent_handlers_test.go,router.go}` |
+
+Note di implementazione:
+
+- **Tabelle in `internal/store`, non in un package `internal/site`** come da schizzo §5.C: nel
+  codice Go esistente è lo store a possedere le tabelle, e la coerenza con quanto già scritto
+  vale più dello schizzo.
+- **Il token di sede è un hash SHA-256, non un valore cifrato**: non deve essere recuperabile
+  nemmeno da chi ha la chiave del vault. `tokenHash` è un campo non esportato, quindi non può
+  finire in una risposta JSON per distrazione.
+- **Confronto a tempo costante senza uscita anticipata**: un confronto normale termina al primo
+  byte diverso, e un `break` al primo riscontro renderebbe il tempo di risposta dipendente dalla
+  posizione della sede in elenco.
+- **`ClaimPendingJobs` è transazionale**: due agenti della stessa sede in polling contemporaneo
+  eseguirebbero altrimenti lo stesso comando due volte su un apparato.
+- **Il push di inventario preserva il tenant esistente**: senza, ogni ciclo declasserebbe a
+  'Generale' i dispositivi attribuiti a un cliente.
+
+Difetti trovati e corretti: `mac_sightings` non aveva la colonna `site` (il Python ce l'ha e la
+usa come filtro), quindi l'attribuzione per sede — il motivo per cui esiste la modalità agent —
+andava persa. Documentata inoltre la **divergenza §9**: la blacklist CLI in Go non ha il bypass
+admin del Python (audit M-1). Era già così in `handleSendCommand` ma non era annotata: era un
+difetto, non una scelta. Regolarizzata e non "corretta" perché la direzione è quella sicura, ma
+**va decisa dagli stakeholder** — finché non lo è, `cli_blacklist_operators` non ha effetto.
+
+Verifica: build statico, `go vet` e `go test ./...` verdi su 16 package; 20 test sullo store e
+8 sulle rotte agente, concentrati sul confine di autenticazione (token errato, X-Site-Id non
+corrispondente, sede passata a central, job di un'altra sede).
+
+Resta: visio export, analizzatori firewall (fortios/panos), MCP + AI e il difetto D5.
