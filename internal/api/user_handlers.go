@@ -40,8 +40,12 @@ func (a *App) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "payload non valido")
 		return
 	}
-	if req.Username == "" || req.Password == "" {
-		writeErr(w, http.StatusBadRequest, "username e password obbligatori")
+	if req.Username == "" {
+		writeErr(w, http.StatusBadRequest, "username obbligatorio")
+		return
+	}
+	if err := auth.ValidatePassword(req.Password); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if !validRole(req.Role) {

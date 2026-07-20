@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"strings"
+
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
 
 // requireAuth: estrae il Bearer JWT, valida e inietta i claims nel context.
@@ -42,6 +44,28 @@ func bearerToken(r *http.Request) string {
 		return strings.TrimSpace(h[len("Bearer "):])
 	}
 	return ""
+}
+
+// assertDeviceAllowed risolve un IP nel device di inventario e ne verifica lo scoping
+// per tenant. Porta di routers/deps.py:assert_device_allowed.
+//
+// È il punto unico di controllo: gli endpoint che accettano un IP dal client
+// (FortiGate, WLC, AI, observability) devono passare da qui e non reimplementare
+// la coppia lookup+scoping, altrimenti un utente può leggere device di altri tenant.
+// In caso di esito negativo scrive già la risposta HTTP e ritorna ok=false.
+func (a *App) assertDeviceAllowed(w http.ResponseWriter, r *http.Request, ip string) (*store.Device, bool) {
+	claims := claimsFrom(r.Context())
+	d, err := a.store.GetDevice(ip)
+	if err != nil || d == nil {
+		writeErr(w, http.StatusNotFound, "Dispositivo non presente in inventario")
+		return nil, false
+	}
+	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
+	if !canSeeTenant(scoped, d.Tenant) {
+		writeErr(w, http.StatusForbidden, "tenant non consentito")
+		return nil, false
+	}
+	return d, true
 }
 
 var roleRank = map[string]int{"viewer": 1, "operator": 2, "admin": 3}

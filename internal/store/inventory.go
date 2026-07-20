@@ -14,6 +14,9 @@ type Device struct {
 	EnableSecretEnc string
 	Tenant          string
 	Hostname        string
+	Site            string
+	SSHPort         int
+	Transports      string // JSON {protocollo: porta|null}; "" = solo ssh sulla SSHPort
 }
 
 type DetectedVersion struct {
@@ -33,14 +36,15 @@ type Tenant struct {
 
 func scanDevice(row interface{ Scan(...any) error }) (*Device, error) {
 	d := &Device{}
-	err := row.Scan(&d.IP, &d.Vendor, &d.Profile, &d.Username, &d.PasswordEnc, &d.EnableSecretEnc, &d.Tenant, &d.Hostname)
+	err := row.Scan(&d.IP, &d.Vendor, &d.Profile, &d.Username, &d.PasswordEnc, &d.EnableSecretEnc,
+		&d.Tenant, &d.Hostname, &d.Site, &d.SSHPort, &d.Transports)
 	if err != nil {
 		return nil, err
 	}
 	return d, nil
 }
 
-const deviceCols = `ip, vendor, profile, username, password_enc, enable_secret_enc, tenant, hostname`
+const deviceCols = `ip, vendor, profile, username, password_enc, enable_secret_enc, tenant, hostname, site, ssh_port, transports`
 
 func (s *Store) GetDevice(ip string) (*Device, error) {
 	d, err := scanDevice(s.DB.QueryRow(`SELECT `+deviceCols+` FROM devices WHERE ip = ?`, ip))
@@ -68,12 +72,18 @@ func (s *Store) ListDevices() ([]*Device, error) {
 }
 
 func (s *Store) UpsertDevice(d *Device) error {
-	_, err := s.DB.Exec(`INSERT INTO devices(`+deviceCols+`) VALUES(?,?,?,?,?,?,?,?)
+	port := d.SSHPort
+	if port == 0 {
+		port = 22
+	}
+	_, err := s.DB.Exec(`INSERT INTO devices(`+deviceCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(ip) DO UPDATE SET vendor=excluded.vendor, profile=excluded.profile,
 			username=excluded.username, password_enc=excluded.password_enc,
 			enable_secret_enc=excluded.enable_secret_enc, tenant=excluded.tenant,
-			hostname=excluded.hostname`,
-		d.IP, d.Vendor, d.Profile, d.Username, d.PasswordEnc, d.EnableSecretEnc, d.Tenant, d.Hostname)
+			hostname=excluded.hostname, site=excluded.site,
+			ssh_port=excluded.ssh_port, transports=excluded.transports`,
+		d.IP, d.Vendor, d.Profile, d.Username, d.PasswordEnc, d.EnableSecretEnc, d.Tenant, d.Hostname,
+		d.Site, port, d.Transports)
 	return err
 }
 

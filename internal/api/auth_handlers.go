@@ -36,8 +36,12 @@ func (a *App) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "payload non valido")
 		return
 	}
-	if len(req.Username) == 0 || len(req.Password) < 6 {
-		writeErr(w, http.StatusBadRequest, "username obbligatorio e password ≥ 6 caratteri")
+	if len(req.Username) == 0 {
+		writeErr(w, http.StatusBadRequest, "username obbligatorio")
+		return
+	}
+	if err := auth.ValidatePassword(req.Password); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	hash, err := auth.HashPassword(req.Password)
@@ -103,8 +107,8 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "payload non valido")
 		return
 	}
-	if len(req.NewPassword) < 6 {
-		writeErr(w, http.StatusBadRequest, "la nuova password deve avere almeno 6 caratteri")
+	if err := auth.ValidatePassword(req.NewPassword); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	u, err := a.store.GetUser(claims.Username)

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -62,6 +63,18 @@ func New(secret []byte) *Service {
 		failures: map[string]*failState{},
 		wsTokens: map[string]wsToken{},
 	}
+}
+
+// MinPasswordLength allinea la policy a security/user_manager.py (MIN_PASSWORD_LENGTH = 8).
+const MinPasswordLength = 8
+
+// ValidatePassword è l'unico punto di verità della policy password: gli handler
+// non devono reimplementare il controllo di lunghezza.
+func ValidatePassword(plain string) error {
+	if len(plain) < MinPasswordLength {
+		return fmt.Errorf("la password deve contenere almeno %d caratteri", MinPasswordLength)
+	}
+	return nil
 }
 
 func HashPassword(plain string) (string, error) {
