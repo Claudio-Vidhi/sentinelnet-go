@@ -149,6 +149,17 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/wlc/{ip}/interfaces", a.requireAuth("", a.handleWLCInterfaces))
 	r.Get("/api/wlc/{ip}/diagnose-client/{mac}", a.requireAuth("", a.handleWLCDiagnoseClient))
 
+	// --- Provisioner day-0 (op): genera, scarica, applica ---
+	r.Post("/api/provisioner/generate", a.requireAuth("operator", a.handleProvisionerGenerate))
+	r.Post("/api/provisioner/download", a.requireAuth("operator", a.handleProvisionerDownload))
+	r.Post("/api/provisioner/push-ssh", a.requireAuth("operator", a.handleProvisionerPushSSH))
+	r.Post("/api/provisioner/push-serial", a.requireAuth("operator", a.handleProvisionerPushSerial))
+	r.Get("/api/provisioner/serial-ports", a.requireAuth("operator", a.handleProvisionerSerialPorts))
+	r.Post("/api/provisioner/fgt/generate", a.requireAuth("operator", a.handleFGTProvisionerGenerate))
+	r.Post("/api/provisioner/fgt/download", a.requireAuth("operator", a.handleFGTProvisionerDownload))
+	r.Post("/api/provisioner/fgt/push-ssh", a.requireAuth("operator", a.handleFGTProvisionerPushSSH))
+	r.Post("/api/provisioner/fgt/push-serial", a.requireAuth("operator", a.handleFGTProvisionerPushSerial))
+
 	// --- Observability (Live Flows) ---
 	r.Get("/api/observability/top", a.requireAuth("", a.handleObsTop))
 	r.Get("/api/observability/syslog", a.requireAuth("", a.handleObsSyslog))

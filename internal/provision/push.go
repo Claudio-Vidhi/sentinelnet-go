@@ -26,6 +26,10 @@ type PushResult struct {
 	Status  string `json:"status"`
 	Output  string `json:"output,omitempty"`
 	Message string `json:"message,omitempty"`
+	// Method e APIError valgono solo per il FortiGate, che ha due canali:
+	// dicono quale ha funzionato e perché il primo non è bastato.
+	Method   string `json:"method,omitempty"`
+	APIError string `json:"api_error,omitempty"`
 }
 
 func pushError(format string, a ...any) PushResult {
