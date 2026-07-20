@@ -62,6 +62,9 @@ func NewApp(cfg *config.Config, st *store.Store, authSvc *auth.Service, vault *c
 // il logger di audit fuori dal package.
 func (a *App) EnableObservability(obs *obsstore.Store) *observability.Manager {
 	mgr := observability.NewManager(obs, a.store, a.auditLog)
+	// Il poller REST ha bisogno dei token, cifrati nel vault: gli si passa la
+	// fabbrica di client, non le credenziali.
+	mgr.SetClientFunc(a.fgtClient)
 	a.obs, a.obsMgr = obs, mgr
 	return mgr
 }

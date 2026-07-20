@@ -138,3 +138,26 @@ la dashboard.
 
 **Effetto**: nullo per i chiamanti che controllano se il campo è valorizzato;
 un chiamante che facesse `is None` andrebbe adeguato a un test di verità.
+
+---
+
+## 8. Il poller API non ha ripiego SSH
+
+**Python** (`observability/ingesters/api_poller.py`): chiama
+`get_system_status` e `get_interfaces`, che hanno entrambe il ripiego SSH.
+Un apparato con la REST non raggiungibile viene quindi interrogato via SSH a
+ogni giro di polling.
+
+**Go** (`internal/observability/apipoller.go`): solo REST, passando `nil`
+come SSHRunner.
+
+**Motivo**: il poller gira in sottofondo su tutto l'inventario a intervalli
+di `api_poll_s`. Un ripiego SSH trasforma ogni apparato irraggiungibile in
+decine di secondi di attesa (dial + timeout), moltiplicate per il numero di
+apparati, dentro un giro che dovrebbe essere leggero. Le viste interattive
+mantengono il proprio ripiego SSH: lì l'attesa è richiesta da un operatore
+che la sta aspettando.
+
+**Effetto**: per un FortiGate con la sola SSH raggiungibile mancano gli
+snapshot in `api_observations`, e il contesto dell'assistente AI su
+quell'apparato è più povero. Nessuna funzione interattiva è degradata.

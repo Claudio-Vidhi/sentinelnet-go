@@ -30,6 +30,7 @@ type Manager struct {
 	current   map[string]bindKey
 	status    map[string]ListenerStatus
 	cfg       Config
+	clientFor ClientFunc
 
 	retentionOnce sync.Once
 	cancelTasks   context.CancelFunc
@@ -203,9 +204,10 @@ func (m *Manager) Apply(ctx context.Context, cfg Config) {
 		m.retentionOnce.Do(func() {
 			tctx, cancel := context.WithCancel(context.Background())
 			m.cancelTasks = cancel
-			m.tasksWG.Add(2)
+			m.tasksWG.Add(3)
 			go m.retentionLoop(tctx)
 			go m.correlationLoop(tctx)
+			go m.apiPollLoop(tctx)
 		})
 	}
 }
