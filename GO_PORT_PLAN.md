@@ -734,3 +734,36 @@ fossero stati adattati al codice invece del contrario.
 
 Prossimi passi: 11 handler provisioner (`/api/provisioner/*`), poi 12-13 `site/` + sedi/agent,
 visio export, analizzatori firewall, MCP + AI e il difetto D5.
+
+### 2026-07-20 — Traccia 3, passo 11: rotte del provisioner (day-0 completo)
+
+| Intervento | File |
+|---|---|
+| Consegna FortiOS: REST API (config-script base64), SSH, console seriale. | `internal/provision/fortigate_push.go` |
+| 9 rotte `/api/provisioner/*` per switch e FortiGate. | `internal/api/{provisioner_handlers.go,router.go}` |
+| Golden mancante: WAN senza `wan_mode` (default "dhcp"). | `internal/provision/testdata/fortigate/wan_mode_default.*` |
+
+Note di implementazione:
+
+- **FortiOS non è lo switch Cisco** su due punti che contano: il commento è `#` e non `!`
+  (serve un filtro dedicato, altrimenti i commenti passano e la CLI li rifiuta uno per uno)
+  e la config è salvata a ogni `end` — quindi niente `write memory`, che sarebbe un comando
+  sconosciuto, e nessun `configure terminal` attorno a un testo che contiene già i propri
+  `config ... end`.
+- **Gli handler lavorano sul payload generico**: il mascheramento ragiona sui nomi delle
+  chiavi, la struct tipizzata serve solo a generare il testo.
+- **Le tre garanzie del finding I-2 hanno un test ciascuna**: mascheramento di default,
+  materializzazione esplicita e auditata (solo il valore `true` materializza, così un
+  parametro malformato ricade sul comportamento sicuro), e push che applica i segreti reali
+  ma restituisce al client la versione con i placeholder. L'ultima è verificata dall'esterno,
+  sull'ordine reale delle chiamate: se `MaskSecrets` mutasse il payload, l'apparato
+  riceverebbe i placeholder al posto delle password.
+- Sul FortiGate il push prova **REST API e poi SSH**, come l'osservabilità; `method` e
+  `api_error` dicono quale canale ha funzionato e perché il primo non è bastato.
+
+Verifica: build statico, `go vet` e `go test ./...` verdi su 16 package; 10 test sugli
+handler del provisioner.
+
+**Il provisioning è completo** (passi 7-11). Prossimi passi: 12-13 `site/` + tabelle e le
+rotte sedi/agent (`site_agent.py` non va portato: solo le rotte riceventi, vedi §5.C), poi
+visio export, analizzatori firewall (fortios/panos), MCP + AI e il difetto D5.
