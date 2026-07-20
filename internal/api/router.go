@@ -104,6 +104,12 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/mac/overrides/delete", a.requireAuth("operator", a.handleMacOverrideDelete))
 	r.Get("/api/mac/switch/{ip}", a.requireAuth("", a.handleMacSwitchTable))
 
+	// --- ARP / Client Map ---
+	r.Post("/api/arp/scan", a.requireAuth("operator", a.handleARPScan))
+	r.Get("/api/arp/search", a.requireAuth("", a.handleARPSearch))
+	r.Get("/api/arp/client-map", a.requireAuth("", a.handleARPClientMap))
+	r.Get("/api/arp/stats", a.requireAuth("", a.handleARPStats))
+
 	// --- Config Analyzer (auth read, tenant-scoped) ---
 	r.Get("/api/config-analyzer", a.requireAuth("", a.handleConfigAnalyzerAll))
 	r.Get("/api/config-analyzer/{ip}", a.requireAuth("", a.handleConfigAnalyzerDevice))
