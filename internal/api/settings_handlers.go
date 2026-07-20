@@ -185,3 +185,43 @@ func (a *App) handleSetCliBlacklistSettings(w http.ResponseWriter, r *http.Reque
 		"cli_blacklist_operators": req.CliBlacklistOperators,
 	})
 }
+
+// fortigatePreviewSettingKey: flag della tab "FortiGate LIVE" (preview),
+// disattivata per default.
+const fortigatePreviewSettingKey = "fortigate_preview_enabled"
+
+type fortigatePreviewReq struct {
+	Enabled bool `json:"enabled"`
+}
+
+// handleGetFortigatePreviewSettings: GET /api/settings/fortigate-preview.
+func (a *App) handleGetFortigatePreviewSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"fortigate_preview": a.store.GetSetting(fortigatePreviewSettingKey, "") == "true",
+	})
+}
+
+// handleSetFortigatePreviewSettings: POST /api/settings/fortigate-preview.
+//
+// Al contrario della blacklist, qui il default è "disattivata": è una funzione
+// in preview, e solo un "true" esplicito la accende.
+func (a *App) handleSetFortigatePreviewSettings(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	var req fortigatePreviewReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	value, stato := "false", "disattivata"
+	if req.Enabled {
+		value, stato = "true", "attivata"
+	}
+	if err := a.store.SetSetting(fortigatePreviewSettingKey, value); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.auditLog("Tab FortiGate LIVE (preview) " + stato + " dall'utente '" + claims.Username + "'.")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "success", "fortigate_preview": req.Enabled,
+	})
+}

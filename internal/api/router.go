@@ -199,6 +199,8 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/settings/network", a.requireAuth("admin", a.handleSetNetworkSettings))
 	r.Get("/api/settings/cli-blacklist", a.requireAuth("admin", a.handleGetCliBlacklistSettings))
 	r.Post("/api/settings/cli-blacklist", a.requireAuth("admin", a.handleSetCliBlacklistSettings))
+	r.Get("/api/settings/fortigate-preview", a.requireAuth("admin", a.handleGetFortigatePreviewSettings))
+	r.Post("/api/settings/fortigate-preview", a.requireAuth("admin", a.handleSetFortigatePreviewSettings))
 
 	// --- WS terminal ---
 	r.Post("/api/ws-token", a.requireAuth("operator", a.handleWSToken))

@@ -173,3 +173,30 @@ func TestCliBlacklistSettingsRoundTrip(t *testing.T) {
 		t.Error("l'impostazione salvata dalla rotta non ha effetto su commandAllowed")
 	}
 }
+
+// La tab FortiGate LIVE è in preview: solo un "true" esplicito la accende,
+// al contrario della blacklist che è attiva per default.
+func TestFortigatePreviewDefaultsOff(t *testing.T) {
+	app, _ := testFGTApp(t)
+
+	rec := httptest.NewRecorder()
+	app.handleGetFortigatePreviewSettings(rec, httptest.NewRequest("GET", "/api/settings/fortigate-preview", nil))
+	if got := decodeBody(t, rec)["fortigate_preview"]; got != false {
+		t.Errorf("stato iniziale = %v, attesa disattivata", got)
+	}
+
+	req := httptest.NewRequest("POST", "/api/settings/fortigate-preview",
+		strings.NewReader(`{"enabled":true}`))
+	req = withIPParam(req, "", adminClaims)
+	rec = httptest.NewRecorder()
+	app.handleSetFortigatePreviewSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	app.handleGetFortigatePreviewSettings(rec, httptest.NewRequest("GET", "/api/settings/fortigate-preview", nil))
+	if got := decodeBody(t, rec)["fortigate_preview"]; got != true {
+		t.Errorf("stato dopo l'attivazione = %v", got)
+	}
+}
