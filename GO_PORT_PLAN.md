@@ -670,3 +670,27 @@ gating (vendor, 404, 502) e il fatto che la diagnosi risponda 200 anche con SSH 
 
 Resta della traccia 3: provisioner (FortiGate e switch), sedi/agent, visio export. Poi gli
 analizzatori firewall (fortios/panos), MCP + AI e il difetto D5 (`allowed_tabs`).
+
+### 2026-07-20 — Traccia 3, passo 7: generazione config switch
+
+| Intervento | File |
+|---|---|
+| `BuildConfig`: running-config IOS/IOS-XE completa, funzione pura. `ConfigCommands` per le sole righe eseguibili. | `internal/provision/switch.go` |
+| Golden generati eseguendo il modulo Python su 4 configurazioni. | `internal/provision/testdata/*.{json,txt}` |
+
+Note di implementazione:
+
+- **I golden non sono scritti a mano**: sono l'output vero di
+  `services/switch_provisioner.py` su minimale, access completa, distribution con RADIUS e
+  TACACS+ con tutti i default disattivati. §1.3 impone la parità 1:1, e un golden inventato
+  dimostrerebbe solo che il Go è coerente con sé stesso. Verificato anche che il test sappia
+  fallire (alterando `logging buffered` la riga viene segnalata in tutti i casi).
+- **I flag di sicurezza sono `*bool`**: nel Python hanno default `True`, e in Go un campo
+  assente nel JSON diventa `false`. Con dei `bool` semplici, una chiave non inviata dalla UI
+  avrebbe disattivato in silenzio `no vstack`, il blocco anti brute-force, bpduguard e
+  l'accesso solo SSH — cioè il contrario di ciò che l'operatore si aspetta da un generatore
+  di config "hardened". Due test coprono "assente" contro "false esplicito".
+- **Nessun rollback** (§7.4): il Python non ce l'ha e il port non lo inventa.
+
+Prossimi passi: 8 `secrets.go`, 9 push SSH/seriale (unica dipendenza nuova prevista,
+`go.bug.st/serial`), 10 `provision/fortigate.go`, 11 handler provisioner, poi sedi/agent.
