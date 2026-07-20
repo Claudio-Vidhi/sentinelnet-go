@@ -1,0 +1,9 @@
+{
+  "hostname": "FGT-WANDEF",
+  "wan_interface": "port1",
+  "wan_ip": "203.0.113.5",
+  "wan_gw": "203.0.113.1",
+  "mgmt_interface": "mgmt",
+  "mgmt_ip": "10.0.0.1",
+  "mgmt_mask": "255.255.255.0"
+}
