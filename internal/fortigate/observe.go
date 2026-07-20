@@ -177,11 +177,17 @@ func (c *Client) Sessions(ctx context.Context, srcIP, dstIP string, dstPort, cou
 	}
 	if dstPort > 0 {
 		params["dport"] = fmt.Sprint(dstPort)
+		filters = append(filters, fmt.Sprintf("diagnose sys session filter dport %d", dstPort))
 	}
 	if count > 0 {
 		params["count"] = fmt.Sprint(count)
 	}
-	sshCmd := strings.Join(append(filters, "diagnose sys session list"), "\n")
+	// "filter clear" per primo: i filtri di sessione sono stato persistente
+	// sull'apparato, e senza azzerarli si ereditano quelli di una diagnosi
+	// precedente — restituendo in silenzio le sessioni sbagliate.
+	sshCmd := strings.Join(append(
+		append([]string{"diagnose sys session filter clear"}, filters...),
+		"diagnose sys session list"), "\n")
 	if len(params) == 0 {
 		params = nil
 	}
@@ -230,7 +236,11 @@ func (c *Client) PolicyLookup(ctx context.Context, srcIP, dest, protocol string,
 
 // TrafficLogs legge i log di traffico, provando prima il disco e poi la
 // memoria: sui modelli senza disco il primo tentativo fallisce sempre.
-func (c *Client) TrafficLogs(ctx context.Context, srcIP, dstIP, action string, count int, logDevice string) (Result, string, error) {
+// Se nessuno dei due risponde ricade sulla CLI ("execute log filter" +
+// "execute log display"); in quel caso il device restituito è vuoto, perché
+// la CLI non dichiara da quale dei due archivi provengono le righe.
+func (c *Client) TrafficLogs(ctx context.Context, srcIP, dstIP, action string, count int,
+	logDevice string, ssh SSHRunner) (Result, string, error) {
 	devices := []string{"disk", "memory"}
 	if logDevice == "memory" {
 		devices = []string{"memory", "disk"}
@@ -261,7 +271,31 @@ func (c *Client) TrafficLogs(ctx context.Context, srcIP, dstIP, action string, c
 		}
 		lastErr = err
 	}
-	return Result{}, "", lastErr
+	if ssh == nil {
+		return Result{}, "", lastErr
+	}
+
+	lines := []string{"execute log filter reset", "execute log filter category traffic"}
+	if srcIP != "" {
+		lines = append(lines, "execute log filter field srcip "+srcIP)
+	}
+	if dstIP != "" {
+		lines = append(lines, "execute log filter field dstip "+dstIP)
+	}
+	if action != "" {
+		lines = append(lines, "execute log filter field action "+action)
+	}
+	if count <= 0 || count > 1000 {
+		count = 1000
+	}
+	lines = append(lines, fmt.Sprintf("execute log filter view-lines %d", count),
+		"execute log display")
+
+	out, sshErr := ssh(ctx, strings.Join(lines, "\n"))
+	if sshErr != nil {
+		return Result{}, "", errf("API: %v | SSH: %v", lastErr, sshErr)
+	}
+	return Result{Source: "ssh", APIError: lastErr.Error(), Data: out}, "", nil
 }
 
 // FullConfig scarica il backup della configurazione. Contiene segreti, quindi

@@ -446,7 +446,7 @@ type fgtLogsReq struct {
 // log_device, che riporta quale dei due (disk/memory) ha effettivamente
 // risposto: TrafficLogs prova prima quello richiesto e poi l'altro.
 func (a *App) handleFGTLogs(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.fgtDevice(w, r)
+	d, c, ok := a.fgtDevice(w, r)
 	if !ok {
 		return
 	}
@@ -458,7 +458,8 @@ func (a *App) handleFGTLogs(w http.ResponseWriter, r *http.Request) {
 	if req.LogDevice == "" {
 		req.LogDevice = "disk"
 	}
-	res, dev, err := c.TrafficLogs(r.Context(), req.SrcIP, req.DstIP, req.Action, req.Count, req.LogDevice)
+	res, dev, err := c.TrafficLogs(r.Context(), req.SrcIP, req.DstIP, req.Action, req.Count,
+		req.LogDevice, a.fgtSSH(d))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return

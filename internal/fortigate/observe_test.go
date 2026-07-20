@@ -155,7 +155,7 @@ func TestTrafficLogsFallsBackToMemory(t *testing.T) {
 		w.Write([]byte(`{"results":[{"srcip":"10.0.0.5"}]}`))
 	})
 
-	res, dev, err := c.TrafficLogs(context.Background(), "10.0.0.5", "", "deny", 10, "disk")
+	res, dev, err := c.TrafficLogs(context.Background(), "10.0.0.5", "", "deny", 10, "disk", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func TestTrafficLogsBuildsFilter(t *testing.T) {
 		filter, rows = r.URL.Query().Get("filter"), r.URL.Query().Get("rows")
 		w.Write([]byte(`{"results":[]}`))
 	})
-	if _, _, err := c.TrafficLogs(context.Background(), "10.0.0.5", "8.8.8.8", "deny", 25, "memory"); err != nil {
+	if _, _, err := c.TrafficLogs(context.Background(), "10.0.0.5", "8.8.8.8", "deny", 25, "memory", nil); err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{"srcip==10.0.0.5", "dstip==8.8.8.8", "action==deny"} {
@@ -186,6 +186,71 @@ func TestTrafficLogsBuildsFilter(t *testing.T) {
 	}
 	if rows != "25" {
 		t.Errorf("rows = %q", rows)
+	}
+}
+
+// Quando né disk né memory rispondono si passa alla CLI, con i filtri
+// tradotti in "execute log filter" e il motivo REST conservato in api_error.
+func TestTrafficLogsFallsBackToSSH(t *testing.T) {
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	var got string
+	ssh := func(ctx context.Context, cmd string) (string, error) {
+		got = cmd
+		return "date=2026-07-20 srcip=10.0.0.5 action=deny", nil
+	}
+
+	res, dev, err := c.TrafficLogs(context.Background(), "10.0.0.5", "8.8.8.8", "deny", 25, "disk", ssh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Source != "ssh" || dev != "" {
+		t.Errorf("source = %q, device = %q, attesi ssh e vuoto", res.Source, dev)
+	}
+	if res.APIError == "" {
+		t.Error("api_error perso: l'operatore non saprebbe perché la REST ha ceduto")
+	}
+	for _, want := range []string{"execute log filter reset", "field srcip 10.0.0.5",
+		"field dstip 8.8.8.8", "field action deny", "view-lines 25", "execute log display"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("comando CLI = %q, atteso contenesse %q", got, want)
+		}
+	}
+}
+
+// view-lines è limitato a 1000 dalla CLI: un count più alto va troncato,
+// altrimenti il comando viene rifiutato dall'apparato.
+func TestTrafficLogsCapsViewLines(t *testing.T) {
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	var got string
+	ssh := func(ctx context.Context, cmd string) (string, error) { got = cmd; return "ok", nil }
+	if _, _, err := c.TrafficLogs(context.Background(), "", "", "", 50000, "disk", ssh); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "view-lines 1000") {
+		t.Errorf("comando CLI = %q, atteso view-lines 1000", got)
+	}
+}
+
+// Il filtro di sessione è stato persistente sull'apparato: senza "filter
+// clear" iniziale si ereditano i filtri della diagnosi precedente.
+func TestSessionsCLIClearsStaleFilters(t *testing.T) {
+	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	var got string
+	ssh := func(ctx context.Context, cmd string) (string, error) { got = cmd; return "", nil }
+	if _, err := c.Sessions(context.Background(), "10.0.0.5", "", 443, 10, ssh); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "diagnose sys session filter clear") {
+		t.Errorf("comando CLI = %q, atteso iniziasse con filter clear", got)
+	}
+	if !strings.Contains(got, "filter dport 443") {
+		t.Errorf("comando CLI = %q, atteso il filtro dport", got)
 	}
 }
 
