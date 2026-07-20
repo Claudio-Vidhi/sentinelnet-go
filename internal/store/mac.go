@@ -20,6 +20,12 @@ type MacSighting struct {
 	FirstSeen   string `json:"first_seen"`
 	LastSeen    string `json:"last_seen"`
 	SeenCount   int    `json:"seen_count"`
+
+	// Campi calcolati in lettura (non persistiti): classificano l'avvistamento
+	// come infrastruttura ("switch-interface") oppure come endpoint.
+	OriginType      string `json:"origin_type,omitempty"`
+	OriginSwitch    string `json:"origin_switch,omitempty"`
+	OriginInterface string `json:"origin_interface,omitempty"`
 }
 
 type MacOverride struct {

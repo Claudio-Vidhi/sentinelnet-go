@@ -81,7 +81,11 @@ func (a *App) handleMacScan(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = g.Wait()
 
-	pruned, _ := a.store.PruneSightings(a.store.RetentionDays())
+	// La prune del Python agisce su entrambe le tabelle nella stessa passata;
+	// "pruned" resta il conteggio dei soli avvistamenti, come nel contratto.
+	retention := a.store.RetentionDays()
+	pruned, _ := a.store.PruneSightings(retention)
+	_, _ = a.store.PruneARP(retention)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"scanned": len(targets),
 		"results": results,
@@ -150,6 +154,17 @@ func (a *App) macScanDevice(ctx context.Context, d *store.Device) (int, error) {
 			saved++
 		}
 	}
+
+	// MAC delle interfacce proprie dello switch: servono a classificarli come
+	// infrastruttura invece che come endpoint. Non è un dato critico, quindi
+	// un fallimento qui non compromette la scansione della MAC-table.
+	if ifMacs := mac.ParseCLIIfMacs(sess.Run("show interfaces")); len(ifMacs) > 0 {
+		rows := make([]store.IfMacInput, 0, len(ifMacs))
+		for _, m := range ifMacs {
+			rows = append(rows, store.IfMacInput{Interface: m.Interface, Mac: m.Mac})
+		}
+		_, _, _, _ = a.store.RecordSwitchIfMacs(rows, d.IP, switchName)
+	}
 	return saved, nil
 }
 
@@ -214,6 +229,9 @@ func (a *App) handleMacLocate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"origin": []any{}, "transit": []any{}})
 		return
 	}
+	// Prima di separare origine e transito: is_uplink va ricalcolato contro la
+	// topologia corrente, non quello registrato al momento della raccolta.
+	a.newMacReclassifier().apply(sightings)
 
 	// Raggruppa per MAC esatto (una ricerca parziale può restituire più MAC).
 	byMac := map[string][]*store.MacSighting{}
@@ -271,6 +289,7 @@ func (a *App) handleMacSearch(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	a.newMacReclassifier().apply(results)
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
@@ -285,6 +304,7 @@ func (a *App) handleMacSwitchTable(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	a.newMacReclassifier().apply(results)
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
