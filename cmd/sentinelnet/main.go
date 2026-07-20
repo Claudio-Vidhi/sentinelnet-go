@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/config"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/crypto"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/observability"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/obsstore"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ui"
 )
@@ -60,6 +63,20 @@ func main() {
 	authSvc := auth.New(jwtSecret)
 
 	app := api.NewApp(cfg, st, authSvc, vault)
+
+	// Pipeline di osservabilità su database separato: l'ingest UDP scrive a
+	// volumi ben più alti del resto e non deve contendere con inventario e
+	// autenticazione. Se il DB non si apre l'applicazione prosegue senza:
+	// l'osservabilità è un di più, non una funzione essenziale dell'apparato.
+	var obsMgr *observability.Manager
+	obs, err := obsstore.Open(filepath.Join(cfg.DataDir, "observability.db"), nil)
+	if err != nil {
+		logger.Warn("osservabilità non disponibile: apertura DB fallita", "err", err)
+	} else {
+		defer obs.Close()
+		obsMgr = app.EnableObservability(obs)
+		app.StartObservability(context.Background())
+	}
 
 	// Precedenza indirizzo di ascolto: SENTINELNET_ADDR (host:porta completo) >
 	// SENTINELNET_HOST (solo host, porta di default) > host persistito > default.
@@ -123,6 +140,9 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	if obsMgr != nil {
+		obsMgr.Shutdown(ctx)
+	}
 	_ = srv.Shutdown(ctx)
 }
 

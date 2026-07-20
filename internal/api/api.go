@@ -12,6 +12,8 @@ import (
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/config"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/crypto"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/observability"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/obsstore"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
 
@@ -20,6 +22,11 @@ type App struct {
 	store *store.Store
 	auth  *auth.Service
 	vault *crypto.Vault
+
+	// Pipeline di osservabilità. Opzionale: se non collegata, gli handler
+	// /api/observability/* rispondono 503 invece di andare in panic.
+	obs    *obsstore.Store
+	obsMgr *observability.Manager
 
 	// Job asincroni (triage / bulk-command / scan-subnet).
 	jobsMu sync.Mutex
@@ -45,6 +52,18 @@ func NewApp(cfg *config.Config, st *store.Store, authSvc *auth.Service, vault *c
 		vault: vault,
 		jobs:  map[string]*Job{},
 	}
+}
+
+// EnableObservability collega la pipeline di osservabilità e ne ritorna il
+// manager (per lo shutdown). Separata dal costruttore perché è opzionale:
+// senza, il resto dell'applicazione funziona e gli endpoint rispondono 503.
+//
+// Il manager viene costruito qui, e non dal chiamante, per non dover esporre
+// il logger di audit fuori dal package.
+func (a *App) EnableObservability(obs *obsstore.Store) *observability.Manager {
+	mgr := observability.NewManager(obs, a.store, a.auditLog)
+	a.obs, a.obsMgr = obs, mgr
+	return mgr
 }
 
 // ---- context: claims dell'utente autenticato ----
