@@ -1,0 +1,42 @@
+{
+  "hostname": "SW-SEC",
+  "role": "access",
+  "admin_user": "netadmin",
+  "admin_password": "S3cr3t!",
+  "enable_secret": "En4ble!",
+  "mgmt_vlan": 99,
+  "mgmt_ip": "10.0.99.10",
+  "mgmt_mask": "255.255.255.0",
+  "snmpv3": {
+    "user": "snmpuser",
+    "auth_pass": "authpwd123",
+    "priv_pass": "privpwd123",
+    "group": "RO-GRP"
+  },
+  "aaa_protocol": "radius",
+  "aaa_servers": [
+    {
+      "ip": "10.0.0.10",
+      "key": "radkey1"
+    },
+    {
+      "ip": "10.0.0.11",
+      "key": "radkey2"
+    }
+  ],
+  "vlans": [
+    {
+      "id": 10,
+      "name": "DATA"
+    }
+  ],
+  "access_ports": [
+    "GigabitEthernet1/0/1-24"
+  ],
+  "access_vlan": 10,
+  "ntp_servers": [
+    "10.0.0.1"
+  ],
+  "empty_password": "",
+  "port_security": true
+}

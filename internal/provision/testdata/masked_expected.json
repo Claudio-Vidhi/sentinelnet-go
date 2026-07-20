@@ -1,0 +1,42 @@
+{
+  "aaa_protocol": "radius",
+  "aaa_servers": [
+    {
+      "ip": "10.0.0.10",
+      "key": "{{VAULT:aaa_servers.key}}"
+    },
+    {
+      "ip": "10.0.0.11",
+      "key": "{{VAULT:aaa_servers.key}}"
+    }
+  ],
+  "access_ports": [
+    "GigabitEthernet1/0/1-24"
+  ],
+  "access_vlan": 10,
+  "admin_password": "{{VAULT:admin_password}}",
+  "admin_user": "netadmin",
+  "empty_password": "",
+  "enable_secret": "{{VAULT:enable_secret}}",
+  "hostname": "SW-SEC",
+  "mgmt_ip": "10.0.99.10",
+  "mgmt_mask": "255.255.255.0",
+  "mgmt_vlan": 99,
+  "ntp_servers": [
+    "10.0.0.1"
+  ],
+  "port_security": true,
+  "role": "access",
+  "snmpv3": {
+    "auth_pass": "{{VAULT:snmpv3.auth_pass}}",
+    "group": "RO-GRP",
+    "priv_pass": "{{VAULT:snmpv3.priv_pass}}",
+    "user": "snmpuser"
+  },
+  "vlans": [
+    {
+      "id": 10,
+      "name": "DATA"
+    }
+  ]
+}
