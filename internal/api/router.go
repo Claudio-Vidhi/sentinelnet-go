@@ -115,6 +115,7 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/observability/syslog", a.requireAuth("", a.handleObsSyslog))
 	r.Get("/api/observability/anomalies", a.requireAuth("", a.handleObsAnomalies))
 	r.Post("/api/observability/anomalies/{event_id}/status", a.requireAuth("operator", a.handleObsAnomalyStatus))
+	r.Get("/api/observability/flowgraph", a.requireAuth("", a.handleObsFlowGraph))
 	r.Get("/api/observability/api-context", a.requireAuth("", a.handleObsAPIContext))
 	r.Get("/api/observability/config", a.requireAuth("admin", a.handleObsGetConfig))
 	r.Post("/api/observability/config", a.requireAuth("admin", a.handleObsSetConfig))

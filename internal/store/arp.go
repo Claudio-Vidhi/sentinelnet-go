@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"strings"
 	"time"
 )
@@ -324,6 +325,41 @@ func (s *Store) ARPStats(tenants []string) (bindings, uniqueMacs, sources int, e
 	err = s.DB.QueryRow(`SELECT COUNT(*), COUNT(DISTINCT mac), COUNT(DISTINCT source_ip)
 		FROM arp_entries`+where, args...).Scan(&bindings, &uniqueMacs, &sources)
 	return
+}
+
+// VlansForIPs ritorna { ip: vlan } dal binding ARP più recente con VLAN non
+// vuota, VINCOLATO al tenant di ciascun IP (ipTenant: { ip: tenant }).
+//
+// Lo scoping per tenant è obbligatorio, non un'ottimizzazione: gli IP privati
+// si ripetono su sedi diverse (RFC1918 dietro NAT indipendenti). Senza il
+// filtro, un binding ARP della sede B comparirebbe nel grafo dei flussi della
+// sede A solo perché condividono lo stesso indirizzo. Ogni lookup è quindi
+// `ip = ? AND tenant = ?`, mai un IN(...) globale sugli IP.
+//
+// Gli IP senza binding noto per quel tenant sono assenti dal risultato: il
+// fallback è lasciato al chiamante.
+func (s *Store) VlansForIPs(ipTenant map[string]string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(ipTenant) == 0 {
+		return out, nil
+	}
+	for ip, tenant := range ipTenant {
+		if ip == "" {
+			continue
+		}
+		var vlan string
+		err := s.DB.QueryRow(`SELECT vlan FROM arp_entries
+			WHERE ip = ? AND tenant = ? AND vlan != ''
+			ORDER BY last_seen DESC LIMIT 1`, ip, tenant).Scan(&vlan)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out[ip] = vlan
+	}
+	return out, nil
 }
 
 // PruneARP elimina i binding più vecchi della retention.

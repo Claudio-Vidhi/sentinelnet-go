@@ -135,6 +135,60 @@ func (s *Store) SyslogEvents(cutoff int64, scope []string, limit int) ([]SyslogR
 	return out, rows.Err()
 }
 
+// GraphFlow è un flusso aggregato per il grafo (top 50 per byte).
+type GraphFlow struct {
+	Tenant       string
+	SrcIP        string
+	DstIP        string
+	Protocol     *int
+	DstPort      *int
+	TotalBytes   int64
+	TotalPackets int64
+}
+
+// GraphFlows ritorna i flussi più consistenti della finestra, per il grafo.
+func (s *Store) GraphFlows(cutoff int64, scope []string, limit int) ([]GraphFlow, error) {
+	clause, args := tenantClause(scope)
+	params := append([]any{cutoff}, args...)
+	params = append(params, limit)
+
+	rows, err := s.DB.Query(`
+		SELECT tenant, src_ip, dst_ip, protocol, dst_port,
+		       SUM(total_bytes), SUM(total_packets)
+		FROM flow_aggregates
+		WHERE window_start >= ?`+clause+`
+		GROUP BY tenant, src_ip, dst_ip, protocol, dst_port
+		ORDER BY SUM(total_bytes) DESC
+		LIMIT ?`, params...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []GraphFlow{}
+	for rows.Next() {
+		var f GraphFlow
+		var proto, port sql.NullInt64
+		if err := rows.Scan(&f.Tenant, &f.SrcIP, &f.DstIP, &proto, &port,
+			&f.TotalBytes, &f.TotalPackets); err != nil {
+			return nil, err
+		}
+		f.Protocol, f.DstPort = nullInt(proto), nullInt(port)
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+// CountNewAnomalies conta le anomalie ancora aperte nella finestra (KPI "spikes").
+func (s *Store) CountNewAnomalies(cutoff int64, scope []string) (int, error) {
+	clause, args := tenantClause(scope)
+	params := append([]any{cutoff}, args...)
+	var n int
+	err := s.DB.QueryRow(`SELECT COUNT(*) FROM correlated_events
+		WHERE created_ts >= ?`+clause+` AND status = 'new'`, params...).Scan(&n)
+	return n, err
+}
+
 // Anomaly è una riga di /api/observability/anomalies.
 type Anomaly struct {
 	ID           int64  `json:"id"`
