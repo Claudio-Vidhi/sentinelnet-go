@@ -19,6 +19,7 @@ const retentionInterval = time.Hour
 // e task periodici, senza mai richiedere il riavvio del processo.
 type Manager struct {
 	obs      *obsstore.Store
+	st       *store.Store
 	metrics  *metrics.Registry
 	decoder  *ingest.Decoder
 	deps     *ingest.Deps
@@ -44,6 +45,7 @@ type bindKey struct {
 func NewManager(obs *obsstore.Store, st *store.Store, auditLog func(string)) *Manager {
 	m := &Manager{
 		obs:       obs,
+		st:        st,
 		metrics:   obs.Metrics,
 		decoder:   ingest.NewDecoder(),
 		auditLog:  auditLog,
@@ -201,9 +203,29 @@ func (m *Manager) Apply(ctx context.Context, cfg Config) {
 		m.retentionOnce.Do(func() {
 			tctx, cancel := context.WithCancel(context.Background())
 			m.cancelTasks = cancel
-			m.tasksWG.Add(1)
+			m.tasksWG.Add(2)
 			go m.retentionLoop(tctx)
+			go m.correlationLoop(tctx)
 		})
+	}
+}
+
+// correlationLoop esegue la correlazione ogni CorrelationInterval.
+func (m *Manager) correlationLoop(ctx context.Context) {
+	defer m.tasksWG.Done()
+	t := time.NewTicker(CorrelationInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if n, err := m.CorrelateOnce(time.Now().Unix()); err != nil {
+				log.Printf("observability: errore nel ciclo di correlazione: %v", err)
+			} else if n > 0 {
+				log.Printf("observability: correlazione, %d eventi emessi", n)
+			}
+		}
 	}
 }
 

@@ -278,6 +278,92 @@ func (s *Store) TransitionAnomaly(id int64, from, to string, scope []string) err
 	return nil
 }
 
+// SecurityEvent è un evento syslog candidato alla correlazione.
+type SecurityEvent struct {
+	ID       int64
+	TS       int64
+	Tenant   string
+	Severity *int
+	Action   string
+	Message  string
+}
+
+// SecurityEvents seleziona gli eventi syslog candidati: azioni di sicurezza
+// oppure severità alta (che emerge comunque, anche senza flusso corroborante).
+func (s *Store) SecurityEvents(cutoff int64, actions []string, highSeverityMax int, limit int) ([]SecurityEvent, error) {
+	args := make([]any, 0, len(actions)+3)
+	args = append(args, cutoff)
+	for _, a := range actions {
+		args = append(args, a)
+	}
+	args = append(args, highSeverityMax, limit)
+
+	rows, err := s.DB.Query(`
+		SELECT id, ts, tenant, severity, COALESCE(action,''), COALESCE(message,'')
+		FROM syslog_events
+		WHERE ts >= ? AND (lower(COALESCE(action,'')) IN (`+placeholders(len(actions))+`)
+		                   OR severity <= ?)
+		ORDER BY ts DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []SecurityEvent{}
+	for rows.Next() {
+		var e SecurityEvent
+		var sev sql.NullInt64
+		if err := rows.Scan(&e.ID, &e.TS, &e.Tenant, &sev, &e.Action, &e.Message); err != nil {
+			return nil, err
+		}
+		e.Severity = nullInt(sev)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// FlowEvidence è il bucket di flusso che corrobora un evento di sicurezza.
+type FlowEvidence struct {
+	WindowStart  int64 `json:"window_start"`
+	Protocol     *int  `json:"protocol"`
+	DstPort      *int  `json:"dst_port"`
+	TotalBytes   int64 `json:"bytes"`
+	TotalPackets int64 `json:"packets"`
+}
+
+// CorroboratingFlow cerca un bucket con gli stessi endpoint nello stesso
+// tenant, entro la finestra temporale indicata.
+//
+// Il filtro per tenant non è opzionale: senza, un flusso di un'altra sede
+// potrebbe "confermare" un evento che non gli appartiene.
+func (s *Store) CorroboratingFlow(tenant, src, dst string, from, to int64) (*FlowEvidence, error) {
+	var f FlowEvidence
+	var proto, port sql.NullInt64
+	err := s.DB.QueryRow(`
+		SELECT window_start, protocol, dst_port, total_bytes, total_packets
+		FROM flow_aggregates
+		WHERE tenant = ? AND src_ip = ? AND dst_ip = ?
+		  AND window_start BETWEEN ? AND ?
+		ORDER BY window_start DESC LIMIT 1`,
+		tenant, src, dst, from, to).Scan(&f.WindowStart, &proto, &port, &f.TotalBytes, &f.TotalPackets)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	f.Protocol, f.DstPort = nullInt(proto), nullInt(port)
+	return &f, nil
+}
+
+// InsertCorrelatedSQL è usata dal correlatore tramite la coda del writer.
+// INSERT OR IGNORE sull'UNIQUE dedup_key: le ri-esecuzioni non duplicano.
+const InsertCorrelatedSQL = `
+INSERT OR IGNORE INTO correlated_events
+    (created_ts, tenant, kind, src_ip, dst_ip, switch_port, severity,
+     status, dedup_key, evidence_json)
+VALUES (?, ?, ?, ?, ?, ?, ?, 'new', ?, ?)`
+
 // APIObservation è una riga di /api/observability/api-context.
 type APIObservation struct {
 	TS          int64  `json:"ts"`
