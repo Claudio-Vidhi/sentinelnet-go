@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,10 @@ type Credentials struct {
 	Username     string
 	Password     string
 	EnableSecret string
+	// Port è la porta SSH; 0 vale 22. Serve al provisioning day-0, dove
+	// l'apparato può esporre SSH su una porta non standard e non proviene
+	// dall'inventario.
+	Port int
 }
 
 // Session è una shell interattiva su un apparato, sul modello di Netmiko:
@@ -57,8 +62,12 @@ func Dial(ctx context.Context, host string, creds Credentials) (*Session, error)
 		},
 	}
 
+	port := creds.Port
+	if port == 0 {
+		port = 22
+	}
 	d := net.Dialer{Timeout: cfg.Timeout}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, "22"))
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return nil, err
 	}
@@ -243,8 +252,12 @@ func DialInteractive(ctx context.Context, host string, creds Credentials, onData
 			Ciphers:      []string{"aes128-ctr", "aes192-ctr", "aes256-ctr", "aes128-cbc", "3des-cbc"},
 		},
 	}
+	port := creds.Port
+	if port == 0 {
+		port = 22
+	}
 	d := net.Dialer{Timeout: cfg.Timeout}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, "22"))
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return nil, err
 	}

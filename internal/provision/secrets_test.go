@@ -12,7 +12,7 @@ import (
 // davvero: il formato del placeholder e la forma del percorso sono un
 // contratto verso la UI, che li mostra all'operatore.
 func TestMaskSecretsMatchesPythonGolden(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testdata", "masked_input.json"))
+	raw, err := os.ReadFile(filepath.Join("testdata", "secrets", "masked_input.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func TestMaskSecretsMatchesPythonGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	wantRaw, err := os.ReadFile(filepath.Join("testdata", "masked_expected.json"))
+	wantRaw, err := os.ReadFile(filepath.Join("testdata", "secrets", "masked_expected.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestMaskSecretsMatchesPythonGolden(t *testing.T) {
 // La config generata dal payload mascherato non deve contenere nessun
 // segreto: è esattamente ciò che la UI mostra e fa scaricare (finding I-2).
 func TestMaskedConfigMatchesPythonGoldenAndLeaksNothing(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("testdata", "masked_input.json"))
+	raw, err := os.ReadFile(filepath.Join("testdata", "secrets", "masked_input.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestMaskedConfigMatchesPythonGoldenAndLeaksNothing(t *testing.T) {
 	}
 	got := BuildConfig(cfg)
 
-	wantRaw, err := os.ReadFile(filepath.Join("testdata", "masked_config.txt"))
+	wantRaw, err := os.ReadFile(filepath.Join("testdata", "secrets", "masked_config.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
