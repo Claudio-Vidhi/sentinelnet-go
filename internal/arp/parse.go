@@ -20,7 +20,17 @@ type Entry struct {
 }
 
 var (
-	reMACAny = regexp.MustCompile(`\b([0-9a-fA-F]{2}([:\-][0-9a-fA-F]{2}){5}|[0-9a-fA-F]{4}(\.[0-9a-fA-F]{4}){2})\b`)
+	// Notazioni MAC accettate:
+	//   aa:bb:cc:dd:ee:ff / aa-bb-cc-dd-ee-ff   (sei gruppi da due)
+	//   aabb.ccdd.eeff / aabb-ccdd-eeff          (tre gruppi da quattro)
+	//   001a4b-2c3d4e                            (HP/ProCurve, due gruppi da sei)
+	//
+	// Le ultime due forme non sono riconosciute dal Python, che perde
+	// silenziosamente le righe ARP degli switch HP: vedi
+	// docs/DIVERGENZE-DAL-PYTHON.md §2.
+	reMACAny = regexp.MustCompile(`\b([0-9a-fA-F]{2}([:\-][0-9a-fA-F]{2}){5}` +
+		`|[0-9a-fA-F]{4}([.\-][0-9a-fA-F]{4}){2}` +
+		`|[0-9a-fA-F]{6}-[0-9a-fA-F]{6})\b`)
 	reIP     = regexp.MustCompile(`\b(\d{1,3}(?:\.\d{1,3}){3})\b`)
 	reVlanIf = regexp.MustCompile(`(?i)\b(?:vlan|vl)\s*(\d+)\b`)
 )
@@ -62,16 +72,19 @@ func ParseOutput(text string) []Entry {
 	return out
 }
 
-// isDiscardableMAC replica il filtro broadcast/incomplete del Python:
+// isDiscardableMAC scarta broadcast e indirizzi nulli, in QUALUNQUE notazione.
 //
-//	mac.lower().replace('-', ':').replace('.', '') in ("ffffffffffff", "000000000000")
-//
-// Nota: la sostituzione '-'→':' lascia i due punti, quindi in pratica il filtro
-// intercetta solo la forma puntata (ffff.ffff.ffff). La forma con i due punti
-// (ff:ff:ff:ff:ff:ff) passa. È una stranezza del Python replicata qui di
-// proposito per non divergere dai dati prodotti dall'originale.
+// Il Python sostituisce '-' con ':' prima del confronto, lasciando i due punti
+// nella stringa: di fatto intercetta solo la forma puntata e lascia passare
+// ff:ff:ff:ff:ff:ff come se fosse un client reale. Vedi
+// docs/DIVERGENZE-DAL-PYTHON.md §1.
 func isDiscardableMAC(mac string) bool {
-	s := strings.ReplaceAll(strings.ReplaceAll(strings.ToLower(mac), "-", ":"), ".", "")
+	s := strings.Map(func(r rune) rune {
+		if r == ':' || r == '-' || r == '.' {
+			return -1
+		}
+		return r
+	}, strings.ToLower(mac))
 	return s == "ffffffffffff" || s == "000000000000"
 }
 

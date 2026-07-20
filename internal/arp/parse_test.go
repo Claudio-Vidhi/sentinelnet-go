@@ -58,15 +58,6 @@ func TestParseOutputSkipsNonBindingLines(t *testing.T) {
 	}
 }
 
-// Il broadcast in forma puntata viene scartato (come nel Python).
-func TestParseOutputDiscardsDottedBroadcast(t *testing.T) {
-	in := "Internet  10.0.0.255  -   ffff.ffff.ffff  ARPA   Vlan10\n" +
-		"Internet  10.0.0.9    -   0000.0000.0000  ARPA   Vlan10\n"
-	if got := ParseOutput(in); len(got) != 0 {
-		t.Fatalf("entry = %d, attese 0 (%+v)", len(got), got)
-	}
-}
-
 // L'interfaccia non deve coincidere con il MAC o con l'IP della riga.
 func TestParseOutputInterfaceNotMacOrIP(t *testing.T) {
 	got := ParseOutput("10.0.0.5 aa:bb:cc:dd:ee:ff")
@@ -78,19 +69,37 @@ func TestParseOutputInterfaceNotMacOrIP(t *testing.T) {
 	}
 }
 
-// Limite noto ereditato dal Python: la regex MAC copre solo le forme a sei
-// gruppi da due cifre (":" o "-") e quella puntata a tre gruppi da quattro.
-// I formati HP/ProCurve "001a4b-2c3d4e" e "001a-4b2c-3d4e" NON sono
-// riconosciuti — né qui né in collectors/arp_collector.py. Il test lo fissa
-// come comportamento atteso: se un giorno si decide di estendere la regex,
-// va fatto in entrambe le implementazioni insieme.
-func TestParseOutputHPFormatsUnsupported(t *testing.T) {
+// I formati HP/ProCurve devono essere riconosciuti: il Python li perde in
+// silenzio, restituendo zero binding per quegli switch senza alcun errore.
+// Vedi docs/DIVERGENZE-DAL-PYTHON.md §2.
+func TestParseOutputSupportsHPFormats(t *testing.T) {
+	cases := []struct{ line, wantMAC string }{
+		{"10.1.1.9  001a4b-2c3d4e  dynamic  vlan10", "001a4b-2c3d4e"},
+		{"10.1.1.9  001a-4b2c-3d4e  dynamic  vlan10", "001a-4b2c-3d4e"},
+	}
+	for _, c := range cases {
+		got := ParseOutput(c.line)
+		if len(got) != 1 {
+			t.Fatalf("%q: entry = %d, attesa 1 (%+v)", c.line, len(got), got)
+		}
+		if got[0].MAC != c.wantMAC || got[0].IP != "10.1.1.9" {
+			t.Errorf("%q: got %+v", c.line, got[0])
+		}
+	}
+}
+
+// Il broadcast va scartato in QUALUNQUE notazione, non solo in quella puntata
+// come fa il Python. Vedi docs/DIVERGENZE-DAL-PYTHON.md §1.
+func TestParseOutputDiscardsBroadcastInAllNotations(t *testing.T) {
 	for _, line := range []string{
-		"10.1.1.9  001a4b-2c3d4e  dynamic",
-		"10.1.1.9  001a-4b2c-3d4e  dynamic",
+		"Internet 10.0.0.255 - ffff.ffff.ffff ARPA Vlan10",
+		"Internet 10.0.0.255 - ff:ff:ff:ff:ff:ff ARPA Vlan10",
+		"Internet 10.0.0.255 - ff-ff-ff-ff-ff-ff ARPA Vlan10",
+		"Internet 10.0.0.9   - 00:00:00:00:00:00 ARPA Vlan10",
+		"Internet 10.0.0.9   - ffffff-ffffff     ARPA Vlan10",
 	} {
 		if got := ParseOutput(line); len(got) != 0 {
-			t.Errorf("%q: entry = %d, attese 0 (limite noto) — %+v", line, len(got), got)
+			t.Errorf("%q: entry = %d, attese 0 (%+v)", line, len(got), got)
 		}
 	}
 }
