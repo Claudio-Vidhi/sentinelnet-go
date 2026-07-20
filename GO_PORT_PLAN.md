@@ -606,3 +606,37 @@ Note di implementazione:
 Prossimi passi della traccia 3: gli handler (25 rotte `/api/fortigate/*`, incluso il
 `fgtDevice` che riusa `assertDeviceAllowed`), poi WLC, provisioner, sedi/agent e visio export.
 Una volta pronto il client, l'**API poller** della traccia 2 si sblocca.
+
+### 2026-07-20 — Traccia 3, passo 4 e traccia 2, passo 8: rotte FortiGate e poller API
+
+| Intervento | File |
+|---|---|
+| 23 rotte `/api/fortigate/*`: target (token, porta, TLS, test) e osservabilità, tutte via `fgtDevice`. | `internal/api/{fortigate_handlers.go,router.go}` |
+| Ripiego SSH dei log di traffico e `filter clear` nel comando CLI delle sessioni. | `internal/fortigate/observe.go` |
+| `POST /api/fortigate/{ip}/diagnose-client`: diagnosi aggregata, sette sezioni best-effort, risoluzione MAC→IP. | `internal/fortigate/diagnose.go`, `internal/api/fortigate_handlers.go` |
+| Poller REST periodico verso i FortiGate con target configurato. | `internal/observability/{apipoller.go,manager.go}`, `internal/api/api.go` |
+
+Note di implementazione:
+
+- **Due difetti del porting precedente, non divergenze**: `TrafficLogs` aveva perso il
+  ripiego CLI, e il comando di `Sessions` non azzerava i filtri prima di impostarli — i
+  filtri di sessione sono stato persistente sull'apparato, quindi una diagnosi ereditava
+  quelli della precedente e restituiva in silenzio le sessioni sbagliate. Nessuno dei due
+  era in `DIVERGENZE-DAL-PYTHON.md`, che è il criterio per distinguere una scelta da un bug.
+- **La diagnosi non restituisce mai 502**: ogni sezione porta il proprio errore, e un 502
+  direbbe "non so niente" anche con sei sezioni su sette valorizzate.
+- **Chiamate sequenziali nella diagnosi**: il ripiego SSH apre una sessione per comando, e
+  aprirne quattro in parallelo verso lo stesso apparato è un modo affidabile per farsi
+  rifiutare. Il guadagno di latenza non vale il rischio.
+- **Il poller non conosce il vault**: riceve una `ClientFunc` da `EnableObservability`. È
+  la stessa scelta del logger di audit — il package `observability` non deve poter leggere
+  le credenziali.
+- Il poller è **REST-only** (divergenza §8): un ripiego SSH su tutto l'inventario a ogni
+  giro costerebbe decine di secondi per apparato irraggiungibile.
+
+Verifica: build, `go vet` e `go test ./...` verdi; 9 test sulla diagnosi (di cui 2 sugli
+handler) e 7 sul poller. Il race detector non è utilizzabile in questo ambiente perché
+richiede cgo e gcc non è installato.
+
+Resta della traccia 3: WLC, provisioner, sedi/agent, visio export. Poi gli analizzatori
+firewall (fortios/panos), MCP + AI e il difetto D5 (`allowed_tabs`).
