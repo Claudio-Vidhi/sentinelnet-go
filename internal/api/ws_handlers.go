@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/collect"
 	"github.com/coder/websocket"
 	"github.com/go-chi/chi/v5"
@@ -81,8 +82,14 @@ func (a *App) handleWSTerminal(w http.ResponseWriter, r *http.Request) {
 
 	// Input dal browser → apparato: ogni carattere viene inoltrato subito
 	// (l'eco arriva dall'apparato), mentre una copia "ombra" della riga in
-	// corso viene bufferizzata per validarla con isCommandSafe() all'Invio.
+	// corso viene bufferizzata per validarla all'Invio.
 	// Porto di ws_to_ssh() in app_server.py.
+	//
+	// La validazione passa da commandAllowed e non da isCommandSafe: il
+	// terminale deve applicare le stesse regole di /api/send-command,
+	// altrimenti un admin potrebbe riavviare un apparato via API ma non
+	// digitando il comando qui.
+	wsClaims := &auth.Claims{Username: username, Role: u.Role}
 	var lineBuf strings.Builder
 	for {
 		typ, data, err := conn.Read(ctx)
@@ -96,7 +103,7 @@ func (a *App) handleWSTerminal(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case ch == '\r' || ch == '\n':
 				line := strings.TrimSpace(lineBuf.String())
-				if line != "" && !isCommandSafe(line) {
+				if line != "" && !a.commandAllowed(line, wsClaims) {
 					if _, err := bridge.Write([]byte{0x15}); err != nil { // Ctrl-U: cancella la riga sull'apparato
 						return
 					}

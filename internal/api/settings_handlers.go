@@ -142,3 +142,46 @@ func (a *App) handleSetNetworkSettings(w http.ResponseWriter, r *http.Request) {
 		"host":             host,
 	})
 }
+
+type cliBlacklistReq struct {
+	CliBlacklistOperators bool `json:"cli_blacklist_operators"`
+}
+
+// handleGetCliBlacklistSettings: GET /api/settings/cli-blacklist — stato
+// dell'applicazione della blacklist CLI agli operatori (default: attiva).
+func (a *App) handleGetCliBlacklistSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"cli_blacklist_operators": a.blacklistAppliesToOperators(),
+	})
+}
+
+// handleSetCliBlacklistSettings: POST /api/settings/cli-blacklist.
+//
+// Disattivarla consente agli operatori i comandi distruttivi, quindi la
+// modifica è sempre in audit: è un cambio di postura di sicurezza, non una
+// preferenza dell'interfaccia.
+func (a *App) handleSetCliBlacklistSettings(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	var req cliBlacklistReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	// Si persiste "false" solo per la disattivazione esplicita: qualunque
+	// altro valore lascia la blacklist attiva, come da blacklistAppliesToOperators.
+	value := "true"
+	stato := "attivata"
+	if !req.CliBlacklistOperators {
+		value, stato = "false", "disattivata"
+	}
+	if err := a.store.SetSetting(cliBlacklistOperatorsKey, value); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.auditLog("Blacklist comandi CLI per gli operatori " + stato +
+		" dall'utente '" + claims.Username + "'.")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":                  "success",
+		"cli_blacklist_operators": req.CliBlacklistOperators,
+	})
+}

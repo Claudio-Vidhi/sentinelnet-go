@@ -136,3 +136,40 @@ func TestBypassNote(t *testing.T) {
 		t.Errorf("nota operatore = %q", got)
 	}
 }
+
+// La rotta che la UI usa per la checkbox deve esistere e riflettere lo stato
+// reale: senza, l'impostazione sarebbe irraggiungibile e la UI mentirebbe.
+func TestCliBlacklistSettingsRoundTrip(t *testing.T) {
+	app, _ := testFGTApp(t)
+	audit := captureAudit(t)
+
+	// Default: attiva.
+	rec := httptest.NewRecorder()
+	app.handleGetCliBlacklistSettings(rec, httptest.NewRequest("GET", "/api/settings/cli-blacklist", nil))
+	if got := decodeBody(t, rec)["cli_blacklist_operators"]; got != true {
+		t.Errorf("stato iniziale = %v, attesa attiva", got)
+	}
+
+	// Disattivazione.
+	req := httptest.NewRequest("POST", "/api/settings/cli-blacklist",
+		strings.NewReader(`{"cli_blacklist_operators":false}`))
+	req = withIPParam(req, "", adminClaims)
+	rec = httptest.NewRecorder()
+	app.handleSetCliBlacklistSettings(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(audit(), "disattivata") {
+		t.Errorf("cambio di postura non registrato in audit: %s", audit())
+	}
+
+	// Rilettura: ora un operatore passa.
+	rec = httptest.NewRecorder()
+	app.handleGetCliBlacklistSettings(rec, httptest.NewRequest("GET", "/api/settings/cli-blacklist", nil))
+	if got := decodeBody(t, rec)["cli_blacklist_operators"]; got != false {
+		t.Errorf("stato dopo la disattivazione = %v", got)
+	}
+	if !app.commandAllowed("reload", &auth.Claims{Username: "op", Role: "operator"}) {
+		t.Error("l'impostazione salvata dalla rotta non ha effetto su commandAllowed")
+	}
+}
