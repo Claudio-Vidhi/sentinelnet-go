@@ -118,3 +118,23 @@ oppure `Juniper/go-netconf`). Rimandato finché non esiste un apparato che lo
 richieda davvero.
 
 **Stato**: rimandato per scelta, non dimenticato (§5.B punto 10 del piano).
+
+---
+
+## 7. `resolved_ip` della diagnosi client: stringa vuota invece di `null`
+
+**Python** (`services/fortigate_service.py`, `diagnose_client`): quando il
+client è indicato per MAC e la risoluzione in IP non riesce, la risposta
+contiene `"resolved_ip": null`.
+
+**Go** (`internal/fortigate/diagnose.go`): nello stesso caso il campo vale
+`""`. Resta assente, come nel Python, quando il client era già un IP.
+
+**Motivo**: distinguere "assente" da "presente e nullo" in Go richiede un
+puntatore con marshalling personalizzato, per una differenza che nessun
+consumatore sfrutta — il campo si legge con un test di verità, e sia `null`
+sia `""` sono falsi. I consumatori sono l'assistente AI e il tool MCP, non
+la dashboard.
+
+**Effetto**: nullo per i chiamanti che controllano se il campo è valorizzato;
+un chiamante che facesse `is None` andrebbe adeguato a un test di verità.

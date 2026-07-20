@@ -135,6 +135,7 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/fortigate/{ip}/policy-lookup", a.requireAuth("", a.handleFGTPolicyLookup))
 	r.Post("/api/fortigate/{ip}/sessions", a.requireAuth("", a.handleFGTSessions))
 	r.Post("/api/fortigate/{ip}/logs", a.requireAuth("", a.handleFGTLogs))
+	r.Post("/api/fortigate/{ip}/diagnose-client", a.requireAuth("", a.handleFGTDiagnoseClient))
 	// Contiene segreti: richiede 'operator' ed è sempre in audit.
 	r.Get("/api/fortigate/{ip}/full-config", a.requireAuth("operator", a.handleFGTFullConfig))
 

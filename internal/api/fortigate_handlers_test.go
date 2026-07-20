@@ -266,3 +266,67 @@ func TestHandleFGTStatusRESTErrorIs502(t *testing.T) {
 		t.Errorf("status = %d, atteso 502: %s", rec.Code, rec.Body.String())
 	}
 }
+
+// La diagnosi aggregata risponde 200 con tutte le sezioni, e per un client
+// indicato per MAC risolve l'IP dall'inventario device.
+func TestHandleFGTDiagnoseClientAggregatesSections(t *testing.T) {
+	app, st := testFGTApp(t)
+	ip := setupFGTDevice(t, app, st, func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "user/device/query") {
+			w.Write([]byte(`{"results":[{"mac":"aa:bb:cc:dd:ee:ff","ip":"10.0.0.7"}]}`))
+			return
+		}
+		w.Write([]byte(`{"results":[]}`))
+	})
+
+	req := httptest.NewRequest("POST", "/api/fortigate/"+ip+"/diagnose-client",
+		strings.NewReader(`{"client":"aa:bb:cc:dd:ee:ff","dest":"8.8.8.8"}`))
+	req = withIPParam(req, ip, adminClaims)
+	rec := httptest.NewRecorder()
+	app.handleFGTDiagnoseClient(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	out := decodeBody(t, rec)
+	if out["client_type"] != "mac" {
+		t.Errorf("client_type = %v, atteso mac", out["client_type"])
+	}
+	if out["resolved_ip"] != "10.0.0.7" {
+		t.Errorf("resolved_ip = %v, atteso 10.0.0.7", out["resolved_ip"])
+	}
+	sections, ok := out["sections"].(map[string]any)
+	if !ok {
+		t.Fatalf("sections = %#v", out["sections"])
+	}
+	for _, name := range []string{"device_inventory", "arp", "dhcp_leases",
+		"sessions", "traffic_logs", "policy_lookup", "wifi_clients"} {
+		if _, ok := sections[name]; !ok {
+			t.Errorf("sezione %q mancante", name)
+		}
+	}
+}
+
+// Senza il campo 'client' non c'è niente da diagnosticare: 400, e nessuna
+// chiamata all'apparato.
+func TestHandleFGTDiagnoseClientRequiresClient(t *testing.T) {
+	app, st := testFGTApp(t)
+	called := false
+	ip := setupFGTDevice(t, app, st, func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{"results":[]}`))
+	})
+
+	req := httptest.NewRequest("POST", "/api/fortigate/"+ip+"/diagnose-client",
+		strings.NewReader(`{"dest":"8.8.8.8"}`))
+	req = withIPParam(req, ip, adminClaims)
+	rec := httptest.NewRecorder()
+	app.handleFGTDiagnoseClient(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, atteso 400: %s", rec.Code, rec.Body.String())
+	}
+	if called {
+		t.Error("apparato interrogato nonostante la richiesta non valida")
+	}
+}

@@ -471,6 +471,51 @@ func (a *App) handleFGTLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+type fgtDiagnoseReq struct {
+	Client   string `json:"client"`
+	Dest     string `json:"dest"`
+	DestPort int    `json:"dest_port"`
+	Protocol string `json:"protocol"`
+}
+
+// handleFGTDiagnoseClient: POST /api/fortigate/{ip}/diagnose-client — diagnosi
+// aggregata di un client (IP o MAC).
+//
+// Non usa fgtRespond: la diagnosi non fallisce mai in blocco, perché ogni
+// sezione porta con sé il proprio errore. Un 502 qui vorrebbe dire "non so
+// niente", mentre una diagnosi parziale è comunque quello che serve
+// all'operatore.
+func (a *App) handleFGTDiagnoseClient(w http.ResponseWriter, r *http.Request) {
+	d, c, ok := a.fgtDevice(w, r)
+	if !ok {
+		return
+	}
+	var req fgtDiagnoseReq
+	_ = decodeJSON(r, &req)
+	if req.Client == "" {
+		writeErr(w, http.StatusBadRequest, "campo 'client' obbligatorio (IP o MAC)")
+		return
+	}
+	if req.Protocol == "" {
+		req.Protocol = "TCP"
+	}
+	if req.DestPort == 0 {
+		req.DestPort = 443
+	}
+
+	claims := claimsFrom(r.Context())
+	a.auditLog("Diagnosi client '" + req.Client + "' su FortiGate " + d.IP +
+		" da '" + claims.Username + "'.")
+
+	res := c.DiagnoseClient(r.Context(), fortigate.DiagnoseParams{
+		Client:   req.Client,
+		Dest:     req.Dest,
+		DestPort: req.DestPort,
+		Protocol: req.Protocol,
+	}, a.fgtSSH(d))
+	writeJSON(w, http.StatusOK, res)
+}
+
 // handleFGTFullConfig: GET /api/fortigate/{ip}/full-config — richiede
 // 'operator' (contiene segreti) e va sempre registrato in audit.
 func (a *App) handleFGTFullConfig(w http.ResponseWriter, r *http.Request) {
