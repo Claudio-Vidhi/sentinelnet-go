@@ -1,0 +1,134 @@
+# --- SYSTEM GLOBAL / HARDENING ---
+config system global
+    set hostname FGT-HQ-01
+    set timezone Europe/Rome
+    set admintimeout 15
+    set strong-crypto enable
+    set admin-https-redirect enable
+    set admin-lockout-threshold 3
+    set admin-lockout-duration 120
+    set post-login-banner enable
+end
+config system replacemsg admin post_admin-disclaimer-text
+    set buffer "Accesso riservato"
+end
+
+# --- ADMIN LOCALE AGGIUNTIVO ---
+config system admin
+    edit netadmin
+        set password Adm1nPwd!
+        set accprofile "super_admin"
+    next
+end
+
+# --- INTERFACCE ---
+config system interface
+    edit mgmt
+        set mode static
+        set ip 10.0.99.1 255.255.255.0
+        set allowaccess ping https ssh
+        set alias "MGMT"
+    next
+    edit port1
+        set mode static
+        set ip 203.0.113.10 255.255.255.248
+        set allowaccess ping
+        set alias "WAN"
+        set role wan
+    next
+    edit port2
+        set mode static
+        set ip 192.168.1.1 255.255.255.0
+        set allowaccess ping
+        set alias "LAN"
+        set role lan
+        set device-identification enable
+    next
+end
+
+# --- DEFAULT ROUTE ---
+config router static
+    edit 1
+        set gateway 203.0.113.9
+        set device port1
+    next
+end
+
+# --- DNS ---
+config system dns
+    set primary 1.1.1.1
+    set secondary 8.8.8.8
+end
+
+# --- NTP ---
+config system ntp
+    set ntpsync enable
+    set type custom
+    config ntpserver
+        edit 1
+            set server 10.0.0.1
+        next
+        edit 2
+            set server 10.0.0.2
+        next
+    end
+end
+
+# --- DHCP SERVER (LAN) ---
+config system dhcp server
+    edit 1
+        set default-gateway 192.168.1.1
+        set netmask 255.255.255.0
+        set interface port2
+        config ip-range
+            edit 1
+                set start-ip 192.168.1.100
+                set end-ip 192.168.1.200
+            next
+        end
+        set dns-server1 1.1.1.1
+    next
+end
+
+# --- SYSLOG ---
+config log syslogd setting
+    set status enable
+    set server 10.0.0.5
+end
+
+# --- SNMPv3 ---
+config system snmp sysinfo
+    set status enable
+    set description FGT-HQ-01
+end
+config system snmp user
+    edit snmpuser
+        set security-level auth-priv
+        set auth-proto sha
+        set auth-pwd authpwd123
+        set priv-proto aes
+        set priv-pwd privpwd123
+    next
+end
+
+# --- LOG RICHIESTE REST API ---
+config log setting
+    set rest-api-set enable
+    set rest-api-get enable
+end
+
+# --- FIREWALL POLICY LAN -> WAN (NAT) ---
+config firewall policy
+    edit 1
+        set name "LAN-to-WAN"
+        set srcintf port2
+        set dstintf port1
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set schedule "always"
+        set service "ALL"
+        set nat enable
+        set logtraffic all
+    next
+end

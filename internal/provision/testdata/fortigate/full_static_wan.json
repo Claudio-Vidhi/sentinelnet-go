@@ -1,0 +1,39 @@
+{
+  "hostname": "FGT-HQ-01",
+  "timezone": "Europe/Rome",
+  "admin_user": "netadmin",
+  "admin_password": "Adm1nPwd!",
+  "admin_timeout": 15,
+  "lockout": true,
+  "strong_crypto": true,
+  "mgmt_interface": "mgmt",
+  "mgmt_ip": "10.0.99.1",
+  "mgmt_mask": "255.255.255.0",
+  "mgmt_allowaccess": "ping https ssh",
+  "wan_interface": "port1",
+  "wan_mode": "static",
+  "wan_ip": "203.0.113.10",
+  "wan_mask": "255.255.255.248",
+  "wan_gw": "203.0.113.9",
+  "lan_interface": "port2",
+  "lan_ip": "192.168.1.1",
+  "lan_mask": "255.255.255.0",
+  "dhcp_server": true,
+  "dhcp_start": "192.168.1.100",
+  "dhcp_end": "192.168.1.200",
+  "dns_primary": "1.1.1.1",
+  "dns_secondary": "8.8.8.8",
+  "ntp_servers": [
+    "10.0.0.1",
+    "10.0.0.2"
+  ],
+  "syslog_server": "10.0.0.5",
+  "snmpv3": {
+    "user": "snmpuser",
+    "auth_pass": "authpwd123",
+    "priv_pass": "privpwd123"
+  },
+  "lan_to_wan_policy": true,
+  "disable_wan_admin": true,
+  "banner": "Accesso riservato"
+}

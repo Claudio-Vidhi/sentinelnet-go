@@ -1,0 +1,91 @@
+# --- SYSTEM GLOBAL / HARDENING ---
+config system global
+    set hostname FGT-ZTP
+    set timezone Europe/Rome
+    set admintimeout 10
+    set strong-crypto enable
+    set admin-https-redirect enable
+    set admin-lockout-threshold 3
+    set admin-lockout-duration 120
+end
+
+# --- INTERFACCE ---
+config system interface
+    edit port10
+        set mode static
+        set ip 10.0.99.2 255.255.255.0
+        set allowaccess ping https ssh fgfm
+        set alias "MGMT"
+    next
+    edit port1
+        set mode dhcp
+        set allowaccess ping
+        set alias "WAN"
+        set role wan
+    next
+end
+
+# --- API USER (REST, osservabilita' SentinelNet) ---
+config system api-user
+    edit sentinelnet
+        set accprofile readonly
+        config trusthost
+            edit 1
+                set ipv4-trusthost 10.0.0.0 255.255.255.0
+            next
+            edit 2
+                set ipv4-trusthost 10.1.0.5 255.255.255.255
+            next
+        end
+    next
+end
+# Dopo il primo boot generare il token:
+#   execute api-user generate-key sentinelnet
+
+# --- CENTRAL MANAGEMENT (ZTP) ---
+config system central-management
+    set type fortimanager
+    set fmg 10.0.0.50
+end
+
+# --- SECURITY FABRIC ---
+config system csf
+    set status enable
+    set group-name FABRIC-HQ
+end
+
+# --- NETFLOW ---
+config system netflow
+    set collector-ip 10.0.0.60
+end
+
+# --- LOG RICHIESTE REST API ---
+config log setting
+    set rest-api-set enable
+    set rest-api-get enable
+end
+
+# --- HIGH AVAILABILITY ---
+config system ha
+    set group-name HA-HQ
+    set mode a-p
+    set password HaSecret!
+    set hbdev port9 50
+    set session-pickup enable
+    set override enable
+    set priority 200
+    set ha-mgmt-status enable
+    config ha-mgmt-interfaces
+        edit 1
+            set interface port10
+        next
+    end
+    set ha-direct enable
+end
+config system interface
+    edit port10
+        set ip 10.0.99.3 255.255.255.0
+        set allowaccess ping https ssh fgfm
+        set dedicated-to management
+    next
+end

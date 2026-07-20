@@ -1,0 +1,20 @@
+# --- SYSTEM GLOBAL / HARDENING ---
+config system global
+    set hostname FGT-MIN
+    set timezone Europe/Rome
+    set admintimeout 10
+    set strong-crypto enable
+    set admin-https-redirect enable
+    set admin-lockout-threshold 3
+    set admin-lockout-duration 120
+end
+
+# --- INTERFACCE ---
+config system interface
+end
+
+# --- LOG RICHIESTE REST API ---
+config log setting
+    set rest-api-set enable
+    set rest-api-get enable
+end

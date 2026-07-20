@@ -1,0 +1,33 @@
+{
+  "hostname": "FGT-ZTP",
+  "wan_interface": "port1",
+  "wan_mode": "dhcp",
+  "mgmt_interface": "port10",
+  "mgmt_ip": "10.0.99.2",
+  "mgmt_mask": "255.255.255.0",
+  "api_user": {
+    "name": "sentinelnet",
+    "accprofile": "readonly",
+    "trusthosts": [
+      "10.0.0.0 255.255.255.0",
+      "10.1.0.5 255.255.255.255"
+    ]
+  },
+  "central_mgmt": {
+    "type": "fortimanager",
+    "fmg_ip": "10.0.0.50"
+  },
+  "csf_group": "FABRIC-HQ",
+  "netflow_collector": "10.0.0.60",
+  "rest_api_logging": true,
+  "ha": {
+    "group_name": "HA-HQ",
+    "mode": "a-p",
+    "password": "HaSecret!",
+    "hbdev": "port9",
+    "priority": 200,
+    "mgmt_interface": "port10",
+    "mgmt_ip": "10.0.99.3",
+    "mgmt_mask": "255.255.255.0"
+  }
+}

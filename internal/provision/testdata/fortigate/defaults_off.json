@@ -1,0 +1,11 @@
+{
+  "hostname": "FGT-OFF",
+  "lockout": false,
+  "strong_crypto": false,
+  "lan_to_wan_policy": false,
+  "disable_wan_admin": false,
+  "rest_api_logging": false,
+  "central_mgmt": {
+    "type": "fortiguard"
+  }
+}

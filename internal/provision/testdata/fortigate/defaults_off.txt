@@ -1,0 +1,16 @@
+# --- SYSTEM GLOBAL / HARDENING ---
+config system global
+    set hostname FGT-OFF
+    set timezone Europe/Rome
+    set admintimeout 10
+    set admin-https-redirect enable
+end
+
+# --- INTERFACCE ---
+config system interface
+end
+
+# --- CENTRAL MANAGEMENT (ZTP) ---
+config system central-management
+    set type fortiguard
+end
