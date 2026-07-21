@@ -16,6 +16,7 @@ import (
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/config"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/crypto"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/mcp"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/observability"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/obsstore"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
@@ -23,6 +24,16 @@ import (
 )
 
 func main() {
+	// Sottocomando `sentinelnet mcp`: server MCP su stdio (ponte verso l'API
+	// REST del centrale). Non tocca DB/vault — è un client HTTP puro.
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		if err := mcp.Serve(context.Background()); err != nil {
+			os.Stderr.WriteString(err.Error() + "\n")
+			os.Exit(1)
+		}
+		return
+	}
+
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
