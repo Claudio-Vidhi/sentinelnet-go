@@ -1,0 +1,50 @@
+[
+  {
+    "provider": "anthropic",
+    "model": "",
+    "override": 0,
+    "want": 200000
+  },
+  {
+    "provider": "anthropic",
+    "model": "claude-3-5-haiku",
+    "override": 0,
+    "want": 100000
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "override": 0,
+    "want": 100000
+  },
+  {
+    "provider": "gemini",
+    "model": "gemma-2",
+    "override": 0,
+    "want": 24000
+  },
+  {
+    "provider": "ollama",
+    "model": "llama3",
+    "override": 0,
+    "want": 48000
+  },
+  {
+    "provider": "openai",
+    "model": "gpt-4o",
+    "override": 0,
+    "want": 200000
+  },
+  {
+    "provider": "anthropic",
+    "model": "",
+    "override": 50000,
+    "want": 50000
+  },
+  {
+    "provider": "gemini",
+    "model": "gemini-1.5-nano",
+    "override": 0,
+    "want": 100000
+  }
+]
