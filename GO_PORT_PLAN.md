@@ -863,3 +863,36 @@ si apra davvero. Va ripreso quando la verifica è possibile. Il contratto JSON i
 
 Resta della traccia 3/dominio D: **visio export** (rinviato), **analizzatori firewall
 fortios/panos**, **MCP + AI**.
+
+### 2026-07-20 — Dominio D: analizzatori firewall (envelope FortiOS/PAN-OS)
+
+| Intervento | File |
+|---|---|
+| Package foglia `internal/fwanalyzer`: parser a blocchi FortiOS, envelope a 12 sezioni. | `internal/fwanalyzer/{ip.go,fortios.go}` |
+| Analizzatore PAN-OS set-CLI, envelope a 10 sezioni. | `internal/fwanalyzer/panos.go` |
+| `DetectConfigType` (ios/fortios/panos/wlc-aireos). | `internal/fwanalyzer/detect.go` |
+| Golden dagli output veri del Python (fw_analyzers.*). | `internal/fwanalyzer/testdata/` |
+
+Note di implementazione:
+
+- **`internal/fwanalyzer` è foglia**: nessun import interno, così `configanalyzer` potrà
+  importarlo per il dispatch senza ciclo (mirror di `fw_analyzers/` in Python).
+- **Ordine preservato**: i figli dell'albero FortiOS e gli oggetti PAN-OS stanno in slice
+  ordinate, non in mappe — il dict Python conserva l'ordine di apparizione e il frontend rende
+  le righe in quell'ordine. Per FortiOS anche l'ordine delle chiavi `set` conta (sezione
+  vpn_ssl), tenuto in `setOrder`.
+- **L'envelope è un contratto verso il frontend** (id sezione, `label_key`, colonne, ordine):
+  i golden vengono dagli output veri del Python e il confronto è sul JSON a chiavi ordinate.
+  Verificato che i test sappiano fallire (rinominando una sezione).
+- **Il vendor ha la precedenza sul contenuto** in `DetectConfigType`: un vendor noto ma non
+  firewall (es. `cisco`) forza `ios` anche su contenuto FortiOS. Comportamento del Python.
+- **Segreti mascherati**: FortiOS vpn_ssl (`psksecret` & co. → `***REDACTED***`).
+
+**Nota UI (gap noto)**: il `web/dashboard.html` embedded nel port Go è più vecchio e non ha la
+vista firewall a sezioni — consuma solo i campi IOS. Il backend viene portato comunque,
+verificabile in isolamento; l'aggiornamento della UI è un lavoro a parte, deciso con l'utente.
+
+Resta del dominio D: analisi strutturata FortiOS (`analyze_fortios_config`, distinta
+dall'envelope) e WLC AireOS, il dispatch in `AnalyzeDevice` (campi `config_type`/`is_firewall`/
+`firewall`), i converter FortiOS↔PAN-OS con la rotta `/api/config-analyzer/convert`, poi MCP + AI.
+Visio export resta rinviato.
