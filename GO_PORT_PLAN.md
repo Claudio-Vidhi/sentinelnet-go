@@ -943,3 +943,29 @@ Note:
   vendor esatto `cisco_9800`; il `cisco` generico resta `ios`. Divergenza §11.
 
 **Residuo dominio D**: UI dashboard (gap noto), Visio (rinviato), **MCP + AI** (non iniziato).
+
+### 2026-07-21 — Dominio D: MCP server (unità 1/3 di MCP + AI)
+
+| Intervento | File |
+|---|---|
+| Package MCP: registry data-driven, loop stdio JSON-RPC, client HTTP, poll tool-config. | `internal/mcp/{registry.go,server.go,client.go,config.go}` |
+| Sottocomando `sentinelnet mcp`. | `cmd/sentinelnet/mcp.go` |
+| Rotte `/api/mcp/{tools,request,config}`. | `internal/api/{mcp_handlers.go,router.go}` |
+
+Note:
+
+- **Registry data-driven**: lista tool in struct, helper generate `listing` JSON; marshal
+  forward, unmarshal reverse.
+- **Loop stdio**: lettura JSON-RPC 2.0, dispatch interno per tool (fallback `CallTool`), 
+  risposta serializzata.
+- **Client HTTP**: chiama `/api/mcp/request` verso il server localhost; gestisce timeout
+  e redazione token.
+- **Poll tool-config**: rilegge la config ogni `check_interval` s (default 30).
+- **Autenticazione e redazione sono 1:1 col Python**: token header, mascheramento segreti,
+  whitelist tool, blocco su config disabilitata.
+- **Divergenza §12**: binario unico `sentinelnet mcp` non script separato — single static
+  artifact distribution. Solo `command`/`args` nella config Claude Desktop/Cline cambiano.
+- **Golden**: `tools_list.json` e `request_map.json` dal Python; byte-for-byte verificati.
+
+**Residuo dominio D**: unità 2 (AI Assistant — rotta `/api/ai/chat`) e unità 3
+(MCP Client-preview).

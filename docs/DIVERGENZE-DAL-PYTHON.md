@@ -226,3 +226,15 @@ parte wireless invece dei soli campi IOS.
 
 **Effetto**: nessuna perdita di informazione (l'analisi IOS resta sotto
 `ios_base`); `config_type` di un 9800 diventa `wlc-aireos` invece di `ios`.
+
+---
+
+## 12. MCP server: sottocomando invece di script separato
+
+**Python**: il server MCP è uno script a sé (`ai/mcp_server.py`), avviato con
+`python mcp_server.py` nella config del client LLM.
+
+**Go**: è il sottocomando `sentinelnet mcp` del binario unico. Motivo:
+distribuzione a singolo artefatto statico. Comportamento del protocollo, tabella
+tool, auth e redazione sono 1:1 col Python; cambia solo `command`/`args` nella
+config di Claude Desktop/Cline. Nessun'altra divergenza.
