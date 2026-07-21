@@ -2,8 +2,10 @@ package mcp
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"io"
+	"os"
 )
 
 const (
@@ -138,4 +140,16 @@ func serve(in io.Reader, out io.Writer, tools []Tool, call Caller, disabled func
 			}
 		}
 	}
+}
+
+// Serve avvia il server MCP su stdio, cablando client, registry e poll dei
+// tool disabilitati dall'ambiente. Chiamato dal sottocomando `sentinelnet mcp`.
+func Serve(ctx context.Context) error {
+	client, err := NewClientFromEnv()
+	if err != nil {
+		return err
+	}
+	tc := newToolConfig(client)
+	serve(os.Stdin, os.Stdout, Tools, client, tc.disabled)
+	return nil
 }
