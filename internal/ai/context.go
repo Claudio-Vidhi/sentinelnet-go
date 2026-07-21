@@ -4,9 +4,13 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 const truncMarker = "\n... [contesto troncato] ...\n"
+
+// clen conta i code point (rune) di s, come len() su una str Python.
+func clen(s string) int { return utf8.RuneCountInString(s) }
 
 // ContextCharBudget: budget di contesto in caratteri per il modello. override>0
 // vince; altrimenti default prudente per nome modello. Porta di context_char_budget.
@@ -32,7 +36,8 @@ func ContextCharBudget(provider, model string, override int) int {
 	return 200000
 }
 
-var reWord = regexp.MustCompile(`[\w.-]{3,}`)
+// reWord riproduce il \w Unicode di Python (lettere + cifre + underscore) più '.' e '-'.
+var reWord = regexp.MustCompile(`[\p{L}\p{N}_.-]{3,}`)
 
 func questionKeywords(q string) map[string]bool {
 	out := map[string]bool{}
@@ -43,46 +48,65 @@ func questionKeywords(q string) map[string]bool {
 }
 
 func truncateHeadTail(text string, limit int) string {
-	if len(text) <= limit {
+	r := []rune(text)
+	if len(r) <= limit {
 		return text
 	}
-	keep := limit - len(truncMarker)
+	keep := limit - clen(truncMarker)
 	if keep < 0 {
 		keep = 0
 	}
-	head := keep * 7 / 10 // int(keep*0.7)
+	head := int(float64(keep) * 0.7) // int(keep*0.7)
 	tail := keep - head
-	out := text[:head] + truncMarker
+	out := string(r[:head]) + truncMarker
 	if tail > 0 {
-		out += text[len(text)-tail:]
+		out += string(r[len(r)-tail:])
 	}
 	return out
 }
 
 // splitSections riproduce re.split(r"\n(?=config |interface |router |vlan |policy|!\n)")
-// del Python. Se meno di 2 sezioni, si ripiega su paragrafi separati da riga vuota.
+// del Python: il lookahead e' a larghezza zero, quindi lo split avviene su
+// OGNI "\n" seguito da uno dei prefissi (o da "!\n"), scartando solo quel
+// singolo carattere "\n". Se non ci sono punti di split, si ripiega su
+// paragrafi separati da riga vuota.
 func splitSections(text string) []string {
-	// Il match Python e' solo il carattere "\n" (il resto e' lookahead a
-	// larghezza zero, mai consumato): il separatore va scartato per intero,
-	// non lasciato ne' in coda alla sezione precedente ne' in testa alla
-	// successiva.
-	re := regexp.MustCompile(`\n(?:config |interface |router |vlan |policy|!\n)`)
-	locs := re.FindAllStringIndex(text, -1)
-	if len(locs) == 0 {
+	prefixes := []string{"config ", "interface ", "router ", "vlan ", "policy"}
+	var splitPoints []int
+	for i := 0; i < len(text); i++ {
+		if text[i] != '\n' {
+			continue
+		}
+		rest := text[i+1:]
+		matched := false
+		for _, p := range prefixes {
+			if strings.HasPrefix(rest, p) {
+				matched = true
+				break
+			}
+		}
+		if !matched && len(rest) >= 2 && rest[0] == '!' && rest[1] == '\n' {
+			matched = true
+		}
+		if matched {
+			splitPoints = append(splitPoints, i)
+		}
+	}
+	if len(splitPoints) == 0 {
 		return regexp.MustCompile(`\n\s*\n`).Split(text, -1)
 	}
-	parts := make([]string, 0, len(locs)+1)
+	parts := make([]string, 0, len(splitPoints)+1)
 	start := 0
-	for _, m := range locs {
-		parts = append(parts, text[start:m[0]])
-		start = m[0] + 1 // salta solo il carattere "\n" appena consumato
+	for _, i := range splitPoints {
+		parts = append(parts, text[start:i])
+		start = i + 1 // scarta solo il "\n" nel punto di split
 	}
 	parts = append(parts, text[start:])
 	return parts
 }
 
 func filterRelevantSections(text string, keywords map[string]bool, limit int) string {
-	if len(keywords) == 0 || len(text) <= limit {
+	if len(keywords) == 0 || clen(text) <= limit {
 		return truncateHeadTail(text, limit)
 	}
 	parts := splitSections(text)
@@ -134,14 +158,14 @@ func filterRelevantSections(text string, keywords map[string]bool, limit int) st
 			capv = 0
 		}
 		take := s.p
-		if len(take) > capv {
+		if clen(take) > capv {
 			take = truncateHeadTail(take, capv)
 		}
 		if take == "" {
 			continue
 		}
 		kept[s.idx] = take
-		used += len(take) + 1
+		used += clen(take) + 1
 		if used >= limit {
 			break
 		}
@@ -159,11 +183,11 @@ func filterRelevantSections(text string, keywords map[string]bool, limit int) st
 		segs = append(segs, kept[i])
 	}
 	out := strings.Join(segs, "\n")
-	if len(out) < len(text) {
+	if clen(out) < clen(text) {
 		out += truncMarker
 	}
-	if lim := limit + len(truncMarker); len(out) > lim {
-		out = out[:lim]
+	if lim := limit + clen(truncMarker); clen(out) > lim {
+		out = string([]rune(out)[:lim])
 	}
 	return out
 }
@@ -181,7 +205,7 @@ func FitContext(blocks []string, budget int, question string) []string {
 	}
 	total := 0
 	for _, b := range filtered {
-		total += len(b)
+		total += clen(b)
 	}
 	if total <= budget {
 		return filtered
@@ -189,11 +213,11 @@ func FitContext(blocks []string, budget int, question string) []string {
 	kw := questionKeywords(question)
 	out := make([]string, 0, len(filtered))
 	for _, b := range filtered {
-		share := budget * len(b) / total
+		share := int(float64(budget) * (float64(clen(b)) / float64(total)))
 		if share < 400 {
 			share = 400
 		}
-		if len(b) <= share {
+		if clen(b) <= share {
 			out = append(out, b)
 		} else {
 			out = append(out, filterRelevantSections(b, kw, share))
