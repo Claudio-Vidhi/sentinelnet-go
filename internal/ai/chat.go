@@ -9,12 +9,13 @@ import (
 )
 
 type ChatOptions struct {
-	Provider        string
-	Model           string
-	APIKey          string
-	BaseURL         string
-	Timeout         time.Duration
-	RateLimitRPM    int
+	Provider string
+	Model    string
+	APIKey   string
+	BaseURL  string
+	Timeout  time.Duration
+	// RateLimitRPM: nil = non riconfigurare; *0 = illimitato; *N = N/min (porta di rate_limit_rpm=None|int).
+	RateLimitRPM    *int
 	AllowUnredacted bool
 }
 
@@ -38,8 +39,8 @@ func Chat(msgs []Message, opts ChatOptions) (string, error) {
 	if !validProviders[provider] {
 		return "", &Error{Msg: fmt.Sprintf("Provider non supportato: '%s'.", provider)}
 	}
-	if opts.RateLimitRPM != 0 {
-		pkgRateLimiter.configure(opts.RateLimitRPM)
+	if opts.RateLimitRPM != nil {
+		pkgRateLimiter.configure(*opts.RateLimitRPM)
 	}
 	if ok, retry := pkgRateLimiter.allow(); !ok {
 		return "", &RateLimitError{Msg: fmt.Sprintf(
