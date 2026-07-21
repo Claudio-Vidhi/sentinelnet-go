@@ -98,3 +98,38 @@ func TestServeToolsCallDisabledIsError(t *testing.T) {
 		t.Errorf("un tool disabilitato deve dare isError: %#v", out[0]["result"])
 	}
 }
+
+type longCaller struct{}
+
+func (l *longCaller) Call(method, path string, query map[string]string, body any) (any, error) {
+	return strings.Repeat("x", maxText+500), nil
+}
+
+func TestServeToolsCallTruncates(t *testing.T) {
+	tools := []Tool{{
+		Name:        "long_tool",
+		Description: "Returns long string",
+		InputSchema: map[string]any{"type": "object"},
+		BuildRequest: func(a map[string]any) Request {
+			return Request{Method: "GET", Path: "/api/long"}
+		},
+	}}
+
+	out := runServe(t, tools, &longCaller{}, nil,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"long_tool","arguments":{}}}`)
+
+	result := out[0]["result"].(map[string]any)
+	content := result["content"].([]any)
+	text := content[0].(map[string]any)["text"].(string)
+
+	// Check exact length: should be maxText + truncation marker
+	expectedLen := maxText + len("\n... [truncated]")
+	if len(text) != expectedLen {
+		t.Errorf("truncated text length = %d, expected %d", len(text), expectedLen)
+	}
+
+	// Check suffix
+	if !strings.HasSuffix(text, "\n... [truncated]") {
+		t.Errorf("text does not end with truncation marker: %q", text[len(text)-30:])
+	}
+}
