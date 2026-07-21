@@ -59,7 +59,7 @@ func present(a map[string]any, keys ...string) any {
 func str(a map[string]any, k string) string { s, _ := a[k].(string); return s }
 
 func strOr(a map[string]any, k, def string) string {
-	if s, ok := a[k].(string); ok && s != "" {
+	if s, ok := a[k].(string); ok {
 		return s
 	}
 	return def

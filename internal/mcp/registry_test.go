@@ -78,3 +78,24 @@ func TestRequestMapMatchesPythonGolden(t *testing.T) {
 		t.Errorf("request map diverso dal Python:\n--- Go ---\n%s", normJSON(t, gb))
 	}
 }
+
+// strOr deve avere semantica di presenza come dict.get del Python: il default
+// scatta SOLO se la chiave è assente, non quando è presente ma vuota.
+func TestStrOrPresenceSemantics(t *testing.T) {
+	var tool *Tool
+	for i := range Tools {
+		if Tools[i].Name == "get_network_map" {
+			tool = &Tools[i]
+		}
+	}
+	if tool == nil {
+		t.Fatal("tool get_network_map non trovato")
+	}
+
+	if r := tool.BuildRequest(map[string]any{"group": ""}); r.Query["group"] != "" {
+		t.Errorf("group presente e vuoto: got %q, want \"\" (preservato)", r.Query["group"])
+	}
+	if r := tool.BuildRequest(map[string]any{}); r.Query["group"] != "all" {
+		t.Errorf("group assente: got %q, want \"all\" (default)", r.Query["group"])
+	}
+}
