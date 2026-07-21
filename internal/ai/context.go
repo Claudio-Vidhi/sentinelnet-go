@@ -231,23 +231,35 @@ func FitContext(blocks []string, budget int, question string) []string {
 // TenantContextArgs sono gli argomenti di BuildTenantContext (dati già
 // filtrati dal chiamante per UN SOLO tenant/sede).
 type TenantContextArgs struct {
-	Tenant                string
-	Devices               []map[string]any
-	GroupInfo             map[string]any
-	Site                  []map[string]any
-	MacStats              map[string]any
-	MacRecent             []map[string]any
-	ScanSummary           string
-	MaxDevices, MaxRecent int // 0 => 100 / 15
+	Tenant      string
+	Devices     []map[string]any
+	GroupInfo   map[string]any
+	Site        []map[string]any
+	MacStats    map[string]any
+	MacRecent   []map[string]any
+	ScanSummary string
+	// MaxDevices, MaxRecent: 0 => usa il default (100 / 15), come l'unico
+	// chiamante Python (build_tenant_context(max_devices=100, max_recent=15)).
+	// Per questo un cap letterale di 0 non e' esprimibile (nessun chiamante
+	// Go attuale li passa comunque).
+	MaxDevices, MaxRecent int
 }
 
 // asStr converte un valore JSON generico nella sua rappresentazione stringa,
 // riproducendo str(v) di Python: i numeri interi (arrivano come float64 da
-// encoding/json) sono resi senza ".0".
+// encoding/json) sono resi senza ".0". nil (JSON null) diventa "None" e i
+// bool "True"/"False", perche' d.get(k, default) di Python ritorna il valore
+// memorizzato (anche None) quando la chiave e' PRESENTE, usando default solo
+// se la chiave e' ASSENTE: str(None) == "None".
 func asStr(v any) string {
 	switch x := v.(type) {
 	case nil:
-		return ""
+		return "None"
+	case bool:
+		if x {
+			return "True"
+		}
+		return "False"
 	case string:
 		return x
 	case float64:

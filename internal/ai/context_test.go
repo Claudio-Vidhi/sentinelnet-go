@@ -38,25 +38,32 @@ func TestFitContextGolden(t *testing.T) {
 }
 
 func TestBuildTenantContextGolden(t *testing.T) {
-	var golden struct {
+	var cases []struct {
 		Args struct {
-			Tenant    string
-			Devices   []map[string]any
-			GroupInfo map[string]any `json:"group_info"`
-			Site      []map[string]any
-			MacStats  map[string]any   `json:"mac_stats"`
-			MacRecent []map[string]any `json:"mac_recent"`
+			Tenant      string
+			Devices     []map[string]any
+			GroupInfo   map[string]any `json:"group_info"`
+			Site        []map[string]any
+			MacStats    map[string]any   `json:"mac_stats"`
+			MacRecent   []map[string]any `json:"mac_recent"`
+			ScanSummary string           `json:"scan_summary"`
+			MaxDevices  float64          `json:"max_devices"`
+			MaxRecent   float64          `json:"max_recent"`
 		}
 		Want string
 	}
-	readJSON(t, "tenant_context.json", &golden)
-	got := BuildTenantContext(TenantContextArgs{
-		Tenant: golden.Args.Tenant, Devices: golden.Args.Devices,
-		GroupInfo: golden.Args.GroupInfo, Site: golden.Args.Site,
-		MacStats: golden.Args.MacStats, MacRecent: golden.Args.MacRecent,
-	})
-	if got != golden.Want {
-		t.Errorf("BuildTenantContext diverso dal Python\n--- Go ---\n%s\n--- Py ---\n%s", got, golden.Want)
+	readJSON(t, "tenant_context.json", &cases)
+	for i, c := range cases {
+		got := BuildTenantContext(TenantContextArgs{
+			Tenant: c.Args.Tenant, Devices: c.Args.Devices,
+			GroupInfo: c.Args.GroupInfo, Site: c.Args.Site,
+			MacStats: c.Args.MacStats, MacRecent: c.Args.MacRecent,
+			ScanSummary: c.Args.ScanSummary,
+			MaxDevices:  int(c.Args.MaxDevices), MaxRecent: int(c.Args.MaxRecent),
+		})
+		if got != c.Want {
+			t.Errorf("caso %d (%s): BuildTenantContext diverso dal Python\n--- Go ---\n%s\n--- Py ---\n%s", i, c.Args.Tenant, got, c.Want)
+		}
 	}
 }
 
