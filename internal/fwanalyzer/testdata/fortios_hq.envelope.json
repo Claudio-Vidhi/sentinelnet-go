@@ -1,0 +1,448 @@
+{
+  "sections": [
+    {
+      "columns": [
+        {
+          "key": "id",
+          "label_key": "fw.col.id"
+        },
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "srcintf",
+          "label_key": "fw.col.srcintf"
+        },
+        {
+          "key": "dstintf",
+          "label_key": "fw.col.dstintf"
+        },
+        {
+          "key": "srcaddr",
+          "label_key": "fw.col.srcaddr"
+        },
+        {
+          "key": "dstaddr",
+          "label_key": "fw.col.dstaddr"
+        },
+        {
+          "key": "service",
+          "label_key": "fw.col.service"
+        },
+        {
+          "key": "action",
+          "label_key": "fw.col.action"
+        },
+        {
+          "key": "nat",
+          "label_key": "fw.col.nat"
+        },
+        {
+          "key": "status",
+          "label_key": "fw.col.status"
+        },
+        {
+          "key": "schedule",
+          "label_key": "fw.col.schedule"
+        },
+        {
+          "key": "logtraffic",
+          "label_key": "fw.col.logtraffic"
+        }
+      ],
+      "id": "policies",
+      "label_key": "fw.sec.policies",
+      "rows": [
+        {
+          "action": "accept",
+          "dstaddr": "all",
+          "dstintf": "port1",
+          "id": "1",
+          "logtraffic": "all",
+          "name": "LAN-to-WAN",
+          "nat": "enable",
+          "schedule": "always",
+          "service": "HTTPS",
+          "srcaddr": "all",
+          "srcintf": "port2",
+          "status": "enable"
+        },
+        {
+          "action": "accept",
+          "dstaddr": "SRV",
+          "dstintf": "port1",
+          "id": "2",
+          "logtraffic": "disable",
+          "name": "disabled-rule",
+          "nat": "disable",
+          "schedule": "",
+          "service": "HTTPS",
+          "srcaddr": "LAN",
+          "srcintf": "port2",
+          "status": "disable"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "type",
+          "label_key": "fw.col.type"
+        },
+        {
+          "key": "subnet",
+          "label_key": "fw.col.subnet"
+        },
+        {
+          "key": "comment",
+          "label_key": "fw.col.comment"
+        }
+      ],
+      "id": "addresses",
+      "label_key": "fw.sec.addresses",
+      "rows": [
+        {
+          "comment": "rete interna",
+          "name": "LAN",
+          "subnet": "192.168.1.0/24",
+          "type": "ipmask"
+        },
+        {
+          "comment": "",
+          "name": "SRV",
+          "subnet": "192.168.1.10/32",
+          "type": "ipmask"
+        },
+        {
+          "comment": "",
+          "name": "UNUSED-ADDR",
+          "subnet": "10.9.9.0/24",
+          "type": "ipmask"
+        },
+        {
+          "comment": "",
+          "name": "SITE-FQDN",
+          "subnet": "example.com",
+          "type": "fqdn"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "members",
+          "label_key": "fw.col.members"
+        }
+      ],
+      "id": "address_groups",
+      "label_key": "fw.sec.address_groups",
+      "rows": [
+        {
+          "members": "LAN, SRV",
+          "name": "GRP1"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "protocol",
+          "label_key": "fw.col.protocol"
+        },
+        {
+          "key": "tcp_portrange",
+          "label_key": "fw.col.tcp_portrange"
+        },
+        {
+          "key": "udp_portrange",
+          "label_key": "fw.col.udp_portrange"
+        }
+      ],
+      "id": "services",
+      "label_key": "fw.sec.services",
+      "rows": [
+        {
+          "name": "HTTPS",
+          "protocol": "TCP",
+          "tcp_portrange": "443",
+          "udp_portrange": ""
+        },
+        {
+          "name": "UNUSED-SVC",
+          "protocol": "TCP",
+          "tcp_portrange": "9999",
+          "udp_portrange": ""
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "type",
+          "label_key": "fw.col.type"
+        },
+        {
+          "key": "day",
+          "label_key": "fw.col.day"
+        },
+        {
+          "key": "start",
+          "label_key": "fw.col.start"
+        },
+        {
+          "key": "end",
+          "label_key": "fw.col.end"
+        }
+      ],
+      "id": "schedules",
+      "label_key": "fw.sec.schedules",
+      "rows": []
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "extip",
+          "label_key": "fw.col.extip"
+        },
+        {
+          "key": "mappedip",
+          "label_key": "fw.col.mappedip"
+        },
+        {
+          "key": "extintf",
+          "label_key": "fw.col.extintf"
+        },
+        {
+          "key": "extport",
+          "label_key": "fw.col.extport"
+        },
+        {
+          "key": "mappedport",
+          "label_key": "fw.col.mappedport"
+        }
+      ],
+      "id": "vips",
+      "label_key": "fw.sec.vips",
+      "rows": [
+        {
+          "extintf": "port1",
+          "extip": "203.0.113.20",
+          "extport": "443",
+          "mappedip": "192.168.1.10",
+          "mappedport": "443",
+          "name": "WEB-VIP"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "type",
+          "label_key": "fw.col.type"
+        },
+        {
+          "key": "startip",
+          "label_key": "fw.col.startip"
+        },
+        {
+          "key": "endip",
+          "label_key": "fw.col.endip"
+        }
+      ],
+      "id": "ippools",
+      "label_key": "fw.sec.ippools",
+      "rows": []
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "ip",
+          "label_key": "fw.col.ip"
+        },
+        {
+          "key": "zone",
+          "label_key": "fw.col.zone"
+        },
+        {
+          "key": "vdom",
+          "label_key": "fw.col.vdom"
+        },
+        {
+          "key": "allowaccess",
+          "label_key": "fw.col.allowaccess"
+        },
+        {
+          "key": "status",
+          "label_key": "fw.col.status"
+        }
+      ],
+      "id": "interfaces",
+      "label_key": "fw.sec.interfaces",
+      "rows": [
+        {
+          "allowaccess": "ping, https, ssh, http",
+          "ip": "203.0.113.10/29",
+          "name": "port1",
+          "status": "up",
+          "vdom": "root",
+          "zone": ""
+        },
+        {
+          "allowaccess": "ping, https",
+          "ip": "192.168.1.1/24",
+          "name": "port2",
+          "status": "up",
+          "vdom": "root",
+          "zone": "trust"
+        },
+        {
+          "allowaccess": "",
+          "ip": "10.0.10.1/24",
+          "name": "vlan10",
+          "status": "up",
+          "vdom": "root",
+          "zone": "trust"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "remote_gw",
+          "label_key": "fw.col.remote_gw"
+        },
+        {
+          "key": "interface",
+          "label_key": "fw.col.interface"
+        },
+        {
+          "key": "proposal",
+          "label_key": "fw.col.proposal"
+        },
+        {
+          "key": "phase2",
+          "label_key": "fw.col.phase2"
+        }
+      ],
+      "id": "vpn_ipsec",
+      "label_key": "fw.sec.vpn_ipsec",
+      "rows": [
+        {
+          "interface": "port1",
+          "name": "vpn-hq",
+          "phase2": "vpn-hq-p2",
+          "proposal": "aes256-sha256",
+          "remote_gw": "198.51.100.1"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "key",
+          "label_key": "fw.col.key"
+        },
+        {
+          "key": "value",
+          "label_key": "fw.col.value"
+        }
+      ],
+      "id": "vpn_ssl",
+      "label_key": "fw.sec.vpn_ssl",
+      "rows": []
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "accprofile",
+          "label_key": "fw.col.accprofile"
+        },
+        {
+          "key": "trusthost",
+          "label_key": "fw.col.trusthost"
+        },
+        {
+          "key": "remote_auth",
+          "label_key": "fw.col.remote_auth"
+        }
+      ],
+      "id": "administrators",
+      "label_key": "fw.sec.administrators",
+      "rows": [
+        {
+          "accprofile": "super_admin",
+          "name": "admin",
+          "remote_auth": "disable",
+          "trusthost": "10.0.0.0 255.255.255.0"
+        },
+        {
+          "accprofile": "super_admin",
+          "name": "noguard",
+          "remote_auth": "disable",
+          "trusthost": ""
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "kind",
+          "label_key": "fw.col.kind"
+        },
+        {
+          "key": "server",
+          "label_key": "fw.col.server"
+        },
+        {
+          "key": "sso",
+          "label_key": "fw.col.sso"
+        }
+      ],
+      "id": "authentication",
+      "label_key": "fw.sec.authentication",
+      "rows": []
+    }
+  ],
+  "vendor": "fortios"
+}
