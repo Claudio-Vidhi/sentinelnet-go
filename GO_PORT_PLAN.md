@@ -921,6 +921,25 @@ Note di implementazione:
 tutti gli endpoint (analisi per dispositivo, envelope a sezioni, converter). Scoperti restano:
 - **Rendering UI** nel dashboard embedded (gap noto: la vista firewall a sezioni non c'è nel
   `web/dashboard.html` del port — deciso con l'utente di portare il backend avanti).
-- **Analisi strutturata WLC AireOS** (`analyze_wlc_config`, divergenza §10).
 - **Visio export** (rinviato, non verificabile senza Visio).
 - **MCP + AI** (dominio D residuo).
+
+### Analisi WLC Cisco (AireOS + Catalyst 9800) — RISOLVE §10
+
+| Intervento | File |
+|---|---|
+| Porting di `analyze_wlc_config`: WLAN/SSID, sicurezza, interfacce dinamiche, RADIUS, mobility, validazione. Copre AireOS e IOS-XE (9800, con `ios_base`). | `internal/configanalyzer/wlc.go` |
+| Dispatch: `wlc-aireos` → `AnalyzeWLCConfig` invece del ramo IOS. | `internal/configanalyzer/backup.go` |
+| Instradamento `cisco_9800` → analizzatore WLC (divergenza §11, scelta utente). | `internal/fwanalyzer/detect.go` |
+
+Note:
+
+- **Golden per entrambe le piattaforme**: `testdata/wlc_aireos.*` e `testdata/wlc_iosxe.*`,
+  output vero del Python, confronto a chiavi ordinate (l'ordine degli array — wlan per id,
+  interfacce dinamiche per inserimento — è il contratto). Mutazione verificata su entrambi.
+- **C9800**: la richiesta dell'utente ("l'ultimo WLC è il C9800, compatibilità anche per
+  quello") è soddisfatta instradando `cisco_9800` all'analizzatore WLC. Il 9800 mostra la
+  tabella WLAN e conserva l'analisi IOS completa sotto `ios_base` — nessuna perdita. Solo il
+  vendor esatto `cisco_9800`; il `cisco` generico resta `ios`. Divergenza §11.
+
+**Residuo dominio D**: UI dashboard (gap noto), Visio (rinviato), **MCP + AI** (non iniziato).
