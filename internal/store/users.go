@@ -1,6 +1,9 @@
 package store
 
-import "database/sql"
+import (
+	"database/sql"
+	"encoding/json"
+)
 
 type User struct {
 	Username           string
@@ -9,6 +12,23 @@ type User struct {
 	Disabled           bool
 	MustChangePassword bool
 	Tenants            []string // vuoto = tutti
+	// AllowedTabs: tab della dashboard visibili (difetto D5). Vuoto = tutte.
+	// Solo interfaccia: nessun controllo d'accesso vi si appoggia.
+	AllowedTabs []string
+}
+
+// decodeTabs interpreta la colonna allowed_tabs (JSON). Un valore illeggibile
+// o nullo diventa lista vuota — "nessuna restrizione" — invece di propagare un
+// errore: è una preferenza di interfaccia, non deve poter bloccare il login.
+func decodeTabs(raw string) []string {
+	out := []string{}
+	if raw == "" {
+		return out
+	}
+	if err := json.Unmarshal([]byte(raw), &out); err != nil || out == nil {
+		return []string{}
+	}
+	return out
 }
 
 func (s *Store) UserCount() (int, error) {
@@ -20,9 +40,10 @@ func (s *Store) UserCount() (int, error) {
 func (s *Store) GetUser(username string) (*User, error) {
 	u := &User{}
 	var disabled, mcp int
-	err := s.DB.QueryRow(`SELECT username, hashed_password, role, disabled, must_change_password
+	var tabs string
+	err := s.DB.QueryRow(`SELECT username, hashed_password, role, disabled, must_change_password, allowed_tabs
 		FROM users WHERE username = ?`, username).
-		Scan(&u.Username, &u.HashedPassword, &u.Role, &disabled, &mcp)
+		Scan(&u.Username, &u.HashedPassword, &u.Role, &disabled, &mcp, &tabs)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -31,6 +52,7 @@ func (s *Store) GetUser(username string) (*User, error) {
 	}
 	u.Disabled = disabled != 0
 	u.MustChangePassword = mcp != 0
+	u.AllowedTabs = decodeTabs(tabs)
 	u.Tenants, err = s.UserTenants(username)
 	return u, err
 }
@@ -53,7 +75,7 @@ func (s *Store) UserTenants(username string) ([]string, error) {
 }
 
 func (s *Store) ListUsers() ([]*User, error) {
-	rows, err := s.DB.Query(`SELECT username, role, disabled, must_change_password FROM users ORDER BY username`)
+	rows, err := s.DB.Query(`SELECT username, role, disabled, must_change_password, allowed_tabs FROM users ORDER BY username`)
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +84,13 @@ func (s *Store) ListUsers() ([]*User, error) {
 	for rows.Next() {
 		u := &User{}
 		var disabled, mcp int
-		if err := rows.Scan(&u.Username, &u.Role, &disabled, &mcp); err != nil {
+		var tabs string
+		if err := rows.Scan(&u.Username, &u.Role, &disabled, &mcp, &tabs); err != nil {
 			return nil, err
 		}
 		u.Disabled = disabled != 0
 		u.MustChangePassword = mcp != 0
+		u.AllowedTabs = decodeTabs(tabs)
 		out = append(out, u)
 	}
 	if err := rows.Err(); err != nil {
@@ -115,6 +139,24 @@ func (s *Store) SetUserDisabled(username string, disabled bool) error {
 func (s *Store) SetUserPassword(username, hashedPassword string) error {
 	_, err := s.DB.Exec(`UPDATE users SET hashed_password = ?, must_change_password = 0 WHERE username = ?`, hashedPassword, username)
 	return err
+}
+
+// SetAllowedTabs imposta le tab visibili di un utente. Lista vuota = tutte.
+// Ritorna false se l'utente non esiste (404 lato handler).
+func (s *Store) SetAllowedTabs(username string, tabs []string) (bool, error) {
+	if tabs == nil {
+		tabs = []string{}
+	}
+	raw, err := json.Marshal(tabs)
+	if err != nil {
+		return false, err
+	}
+	res, err := s.DB.Exec(`UPDATE users SET allowed_tabs = ? WHERE username = ?`, string(raw), username)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 func (s *Store) SetUserTenants(username string, tenants []string) error {

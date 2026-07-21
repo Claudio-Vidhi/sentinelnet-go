@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 )
@@ -18,11 +19,16 @@ func (a *App) handleListUsers(w http.ResponseWriter, _ *http.Request) {
 		if groups == nil {
 			groups = []string{}
 		}
+		tabs := u.AllowedTabs
+		if tabs == nil {
+			tabs = []string{}
+		}
 		out = append(out, map[string]any{
-			"username": u.Username,
-			"role":     u.Role,
-			"disabled": u.Disabled,
-			"groups":   groups,
+			"username":     u.Username,
+			"role":         u.Role,
+			"disabled":     u.Disabled,
+			"groups":       groups,
+			"allowed_tabs": tabs,
 		})
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -168,6 +174,43 @@ func (a *App) handleUserGroups(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+type userTabsReq struct {
+	Username    string   `json:"username"`
+	AllowedTabs []string `json:"allowed_tabs"`
+}
+
+// handleUserTabs: POST /api/users/tabs — assegna le tab visibili di un utente
+// (vuoto = tutte). Difetto D5.
+//
+// È enforcement solo lato frontend: nasconde i pulsanti delle tab. Le API
+// sensibili restano protette da ruolo e sede a prescindere da questo campo,
+// quindi non è un controllo di sicurezza. Resta comunque in audit perché è un
+// cambiamento amministrativo a un altro utente.
+func (a *App) handleUserTabs(w http.ResponseWriter, r *http.Request) {
+	var req userTabsReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	ok, err := a.store.SetAllowedTabs(req.Username, req.AllowedTabs)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if !ok {
+		writeErr(w, http.StatusNotFound, "Utente non trovato.")
+		return
+	}
+	claims := claimsFrom(r.Context())
+	scope := "tutte"
+	if len(req.AllowedTabs) > 0 {
+		scope = strings.Join(req.AllowedTabs, ", ")
+	}
+	a.auditLog("Tab visibili di '" + req.Username + "' impostate a " + scope +
+		" da '" + claims.Username + "'.")
+	writeJSON(w, http.StatusOK, map[string]any{"status": "success"})
 }
 
 func validRole(role string) bool {

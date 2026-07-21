@@ -1,0 +1,11 @@
+-- Tab della dashboard visibili a un utente (difetto D5).
+--
+-- Enforcement solo lato frontend: il campo nasconde i pulsanti delle tab, ma
+-- le API sensibili restano protette da ruolo e sede a prescindere. Non è
+-- quindi un controllo di sicurezza — è una preferenza di interfaccia, e va
+-- trattata come tale (nessun controllo d'accesso vi si appoggia).
+--
+-- Lista JSON come sites.subnets: un elenco ordinato senza query proprie.
+-- Vuoto = nessuna restrizione (tutte le tab), coerente con get_allowed_tabs()
+-- del Python.
+ALTER TABLE users ADD COLUMN allowed_tabs TEXT NOT NULL DEFAULT '[]';

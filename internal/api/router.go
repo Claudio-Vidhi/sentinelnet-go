@@ -37,6 +37,7 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/users/role", a.requireAuth("admin", a.handleUserRole))
 	r.Post("/api/users/disable", a.requireAuth("admin", a.handleUserDisable))
 	r.Post("/api/users/groups", a.requireAuth("admin", a.handleUserGroups))
+	r.Post("/api/users/tabs", a.requireAuth("admin", a.handleUserTabs))
 
 	// --- Inventory (auth read / op write) ---
 	r.Get("/api/local-devices", a.requireAuth("", a.handleLocalDevices))

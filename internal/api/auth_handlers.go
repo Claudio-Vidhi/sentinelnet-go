@@ -134,8 +134,17 @@ func (a *App) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleMe(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFrom(r.Context())
-	writeJSON(w, http.StatusOK, map[string]string{
-		"username": claims.Username,
-		"role":     claims.Role,
+	// Gli admin non sono mai ristretti: niente tab da nascondere lato frontend,
+	// quindi lista vuota senza nemmeno leggere il DB.
+	tabs := []string{}
+	if claims.Role != "admin" {
+		if u, err := a.store.GetUser(claims.Username); err == nil && u != nil {
+			tabs = u.AllowedTabs
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"username":     claims.Username,
+		"role":         claims.Role,
+		"allowed_tabs": tabs,
 	})
 }
