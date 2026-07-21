@@ -896,3 +896,31 @@ Resta del dominio D: analisi strutturata FortiOS (`analyze_fortios_config`, dist
 dall'envelope) e WLC AireOS, il dispatch in `AnalyzeDevice` (campi `config_type`/`is_firewall`/
 `firewall`), i converter FortiOS↔PAN-OS con la rotta `/api/config-analyzer/convert`, poi MCP + AI.
 Visio export resta rinviato.
+
+### 2026-07-20 — Dominio D: dispatch config analyzer + converter firewall
+
+| Intervento | File |
+|---|---|
+| Analisi strutturata FortiOS (interfacce/policy/validazione). | `internal/fwanalyzer/fortios_structured.go` |
+| Dispatch per tipo in `AnalyzeDevice` (ios/fortios/panos), risultato polimorfo. | `internal/configanalyzer/backup.go`, `internal/api/config_analyzer_handlers.go` |
+| Converter FortiOS↔PAN-OS + rotta `POST /api/config-analyzer/convert`. | `internal/fwanalyzer/convert.go`, `internal/api/config_analyzer_handlers.go` |
+
+Note di implementazione:
+
+- **Risultato polimorfo come mappa**: un FortiGate e un IOS hanno chiavi diverse sotto gli
+  stessi nomi (`interfaces`, `routing`, `validation`), quindi `AnalyzeDevice` assembla una
+  `map[string]any` dai sotto-analizzatori già verificati col golden, con le stesse chiavi del
+  Python — `vtp` solo per IOS, `firewall` null per IOS e l'envelope per i firewall.
+- **Il testo dei converter è un contratto** (la UI lo copia): golden byte per byte nei due
+  versi. L'ordine di apparizione è la chiave ricorrente — oggetti, rotte e figli iterati in
+  slice ordinate, mai in mappe.
+- **Primitive aggiunte in modo additivo** per non toccare gli envelope verificati: raw in
+  `panosCollect`, `attr`/`attrAll`, `fortiRenderStanza`, `prefixToMask`, `cidrSplit`.
+
+**Stato dominio D**: il config analyzer firewall (FortiOS/PAN-OS) è raggiungibile via API in
+tutti gli endpoint (analisi per dispositivo, envelope a sezioni, converter). Scoperti restano:
+- **Rendering UI** nel dashboard embedded (gap noto: la vista firewall a sezioni non c'è nel
+  `web/dashboard.html` del port — deciso con l'utente di portare il backend avanti).
+- **Analisi strutturata WLC AireOS** (`analyze_wlc_config`, divergenza §10).
+- **Visio export** (rinviato, non verificabile senza Visio).
+- **MCP + AI** (dominio D residuo).
