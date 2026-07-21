@@ -4,6 +4,7 @@ package mcp
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -54,17 +55,49 @@ func getenv(k, def string) string {
 	return def
 }
 
+// httpError costruisce l'errore per una risposta >=400, con lo stesso
+// dettaglio del Python: campo JSON "detail" se presente, altrimenti il body
+// grezzo (porta di raise_for_status / "detail" in api()).
+func httpError(status int, raw []byte) error {
+	detail := string(raw)
+	var m map[string]any
+	if json.Unmarshal(raw, &m) == nil {
+		if d, ok := m["detail"].(string); ok {
+			detail = d
+		}
+	}
+	return fmt.Errorf("HTTP %d: %s", status, detail)
+}
+
+// loginTimeout è il timeout della sola richiesta di login (15s in Python,
+// contro i 60s di api()).
+const loginTimeout = 15 * time.Second
+
 func (c *Client) login() error {
 	body, _ := json.Marshal(map[string]string{"username": c.username, "password": c.password})
-	resp, err := c.httpc.Post(c.baseURL+"/api/auth/login", "application/json", bytes.NewReader(body))
+	ctx, cancel := context.WithTimeout(context.Background(), loginTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/auth/login", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpc.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode >= 400 {
+		return httpError(resp.StatusCode, raw)
+	}
 	var out struct {
 		AccessToken string `json:"access_token"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return err
 	}
 	c.token = out.AccessToken
@@ -117,14 +150,7 @@ func (c *Client) Call(method, path string, query map[string]string, body any) (a
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		detail := string(raw)
-		var m map[string]any
-		if json.Unmarshal(raw, &m) == nil {
-			if d, ok := m["detail"].(string); ok {
-				detail = d
-			}
-		}
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, detail)
+		return nil, httpError(resp.StatusCode, raw)
 	}
 	var v any
 	if json.Unmarshal(raw, &v) == nil {
