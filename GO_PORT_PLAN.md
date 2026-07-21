@@ -49,7 +49,7 @@ topology core, commands, triage, scan, mac, config-analyzer (GET), backup, euvd,
 
 Emersi dall'analisi; sono regressioni rispetto al Python, non semplici lacune.
 
-> **Stato al 2026-07-20**: **D1, D2, D3 e D4 sono corretti** (vedi §14). Resta aperto solo **D5**.
+> **Stato al 2026-07-20**: **tutti i difetti D1-D5 sono corretti** (vedi §14). D5 chiuso in 827d1e1.
 
 | # | Difetto | Dove | Impatto |
 |---|---|---|---|
@@ -837,3 +837,29 @@ Verifica: build statico, `go vet` e `go test ./...` verdi su 16 package; 15 test
 dei comandi e rotte di impostazioni.
 
 Resta: visio export, analizzatori firewall (fortios/panos), MCP + AI e il difetto D5.
+
+### 2026-07-20 — Difetto D5 chiuso; visio export rinviato
+
+| Intervento | File |
+|---|---|
+| `allowed_tabs` per-utente: migrazione, store, /me, /users, POST /api/users/tabs. | `internal/store/{users.go,migrations/0010_users_tabs.sql}`, `internal/api/{auth_handlers.go,user_handlers.go,router.go}` |
+
+Note di implementazione:
+
+- **D5 era l'ultimo difetto aperto**: tutti i D1-D5 sono ora corretti.
+- **Enforcement solo lato frontend**, come dichiara il Python: `allowed_tabs` nasconde i
+  pulsanti delle tab, non protegge le API — quelle restano vincolate da ruolo e sede. Per
+  questo la lettura tollera valori illeggibili tornando "nessuna restrizione": è una
+  preferenza di interfaccia e non deve poter bloccare il login.
+- **Gli admin non sono mai ristretti**: `/me` ritorna lista vuota anche con tab salvate,
+  altrimenti un admin potrebbe auto-nascondersi delle tab senza modo di rimetterle.
+
+**Visio export rinviato per decisione dell'utente**: la rotta `/api/map/export/vsdx`
+(`services/visio_export.py`, 551 righe, genera un `.vsdx` = zip OPC + XML) non è portata.
+Il metodo golden non si applica — i byte del `.vsdx` non sono consumati dalla dashboard ma
+scaricati e aperti in Visio — e in questo ambiente non c'è Visio per verificare che il file
+si apra davvero. Va ripreso quando la verifica è possibile. Il contratto JSON in ingresso
+(`{nodes, edges, primitives, connectors}` dal frontend) è già noto e non cambia.
+
+Resta della traccia 3/dominio D: **visio export** (rinviato), **analizzatori firewall
+fortios/panos**, **MCP + AI**.
