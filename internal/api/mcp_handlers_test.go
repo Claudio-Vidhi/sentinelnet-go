@@ -59,3 +59,18 @@ func TestMCPSetRejectsUnknownTool(t *testing.T) {
 		t.Errorf("status = %d, atteso 400", rec.Code)
 	}
 }
+
+func TestMCPSetRejectsMultipleUnknownTools(t *testing.T) {
+	app, _ := testFGTApp(t)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/mcp/settings", strings.NewReader(`{"disabled_tools":["nope1","nope2"]}`)).
+		WithContext(context.WithValue(context.Background(), claimsKey, adminClaims))
+	app.handleSetMCPSettings(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("status = %d, atteso 400", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "nope1") || !strings.Contains(body, "nope2") {
+		t.Errorf("body = %q, atteso sia nope1 che nope2", body)
+	}
+}

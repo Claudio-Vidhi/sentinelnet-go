@@ -948,9 +948,9 @@ Note:
 
 | Intervento | File |
 |---|---|
-| Package MCP: registry data-driven, loop stdio JSON-RPC, client HTTP, poll tool-config. | `internal/mcp/{registry.go,server.go,client.go,config.go}` |
-| Sottocomando `sentinelnet mcp`. | `cmd/sentinelnet/mcp.go` |
-| Rotte `/api/mcp/{tools,request,config}`. | `internal/api/{mcp_handlers.go,router.go}` |
+| Package MCP: registry data-driven, loop stdio JSON-RPC, client HTTP, poll tool-config. | `internal/mcp/{client.go,server.go,registry.go,toolconfig.go}` |
+| Sottocomando `sentinelnet mcp`. | `cmd/sentinelnet/main.go` |
+| Rotte `/api/mcp/settings` e `/api/mcp/tool-config`. | `internal/api/{mcp_handlers.go,router.go}` |
 
 Note:
 
@@ -960,7 +960,7 @@ Note:
   risposta serializzata.
 - **Client HTTP**: chiama `/api/mcp/request` verso il server localhost; gestisce timeout
   e redazione token.
-- **Poll tool-config**: rilegge la config ogni `check_interval` s (default 30).
+- **Poll tool-config**: rilegge la config ogni `check_interval` s (default 60).
 - **Autenticazione e redazione sono 1:1 col Python**: token header, mascheramento segreti,
   whitelist tool, blocco su config disabilitata.
 - **Divergenza §12**: binario unico `sentinelnet mcp` non script separato — single static

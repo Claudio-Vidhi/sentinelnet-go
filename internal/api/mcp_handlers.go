@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/mcp"
 )
@@ -62,11 +63,15 @@ func (a *App) handleSetMCPSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "payload non valido")
 		return
 	}
+	var unknown []string
 	for _, n := range body.DisabledTools {
 		if !knownTool(n) {
-			writeErr(w, http.StatusBadRequest, "Tool sconosciuti: "+n)
-			return
+			unknown = append(unknown, n)
 		}
+	}
+	if len(unknown) > 0 {
+		writeErr(w, http.StatusBadRequest, "Tool sconosciuti: "+strings.Join(unknown, ", "))
+		return
 	}
 	enc, _ := json.Marshal(body.DisabledTools)
 	if err := a.store.SetSetting(mcpDisabledKey, string(enc)); err != nil {
@@ -74,7 +79,11 @@ func (a *App) handleSetMCPSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	claims := claimsFrom(r.Context())
-	a.auditLog("Tool MCP disabilitati impostati dall'utente '" + claims.Username + "'.")
+	rendered := "[]"
+	if len(body.DisabledTools) > 0 {
+		rendered = "[" + strings.Join(body.DisabledTools, ", ") + "]"
+	}
+	a.auditLog("Tool MCP disabilitati impostati a " + rendered + " dall'utente '" + claims.Username + "'.")
 	writeJSON(w, http.StatusOK, map[string]any{"status": "success"})
 }
 
