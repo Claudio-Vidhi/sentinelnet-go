@@ -1,0 +1,216 @@
+{
+  "addr_groups": [
+    {
+      "member": [
+        "LAN",
+        "SRV"
+      ],
+      "name": "GRP1"
+    }
+  ],
+  "addresses": [
+    {
+      "comment": "rete interna",
+      "name": "LAN",
+      "subnet": "192.168.1.0",
+      "type": ""
+    },
+    {
+      "comment": "",
+      "name": "SRV",
+      "subnet": "192.168.1.10",
+      "type": ""
+    },
+    {
+      "comment": "",
+      "name": "UNUSED-ADDR",
+      "subnet": "10.9.9.0",
+      "type": ""
+    },
+    {
+      "comment": "",
+      "name": "SITE-FQDN",
+      "subnet": "",
+      "type": "fqdn"
+    }
+  ],
+  "hostname": "FGT-HQ",
+  "interfaces": [
+    {
+      "allowaccess": [
+        "ping",
+        "https",
+        "ssh",
+        "http"
+      ],
+      "description": "",
+      "ip": "203.0.113.10/29",
+      "name": "port1",
+      "parent": "",
+      "role": "wan",
+      "status": "up",
+      "vdom": "root",
+      "vlanid": ""
+    },
+    {
+      "allowaccess": [
+        "ping",
+        "https"
+      ],
+      "description": "",
+      "ip": "192.168.1.1/24",
+      "name": "port2",
+      "parent": "",
+      "role": "",
+      "status": "up",
+      "vdom": "root",
+      "vlanid": ""
+    },
+    {
+      "allowaccess": [],
+      "description": "",
+      "ip": "10.0.10.1/24",
+      "name": "vlan10",
+      "parent": "port2",
+      "role": "",
+      "status": "up",
+      "vdom": "root",
+      "vlanid": "10"
+    }
+  ],
+  "policies": [
+    {
+      "action": "accept",
+      "dstaddr": [
+        "all"
+      ],
+      "dstintf": [
+        "port1"
+      ],
+      "id": "1",
+      "logtraffic": "all",
+      "name": "LAN-to-WAN",
+      "nat": "enable",
+      "schedule": "always",
+      "service": [
+        "HTTPS"
+      ],
+      "srcaddr": [
+        "all"
+      ],
+      "srcintf": [
+        "port2"
+      ],
+      "status": "enable"
+    },
+    {
+      "action": "accept",
+      "dstaddr": [
+        "SRV"
+      ],
+      "dstintf": [
+        "port1"
+      ],
+      "id": "2",
+      "logtraffic": "disable",
+      "name": "disabled-rule",
+      "nat": "disable",
+      "schedule": "",
+      "service": [
+        "HTTPS"
+      ],
+      "srcaddr": [
+        "LAN"
+      ],
+      "srcintf": [
+        "port2"
+      ],
+      "status": "disable"
+    }
+  ],
+  "routing": {
+    "static": [
+      {
+        "device": "port1",
+        "distance": "",
+        "next_hop": "203.0.113.9",
+        "prefix": "0.0.0.0/0",
+        "seq": "1"
+      }
+    ]
+  },
+  "service_groups": [],
+  "services": [
+    {
+      "name": "HTTPS",
+      "protocol": "TCP",
+      "tcp-portrange": "443",
+      "udp-portrange": ""
+    },
+    {
+      "name": "UNUSED-SVC",
+      "protocol": "TCP",
+      "tcp-portrange": "9999",
+      "udp-portrange": ""
+    }
+  ],
+  "validation": {
+    "admins_without_trusthost": [
+      "noguard"
+    ],
+    "any_any_policies": [
+      "1 (LAN-to-WAN)"
+    ],
+    "disabled_policies": [
+      "2 (disabled-rule)"
+    ],
+    "insecure_mgmt_interfaces": [
+      {
+        "allowaccess": [
+          "http"
+        ],
+        "name": "port1"
+      }
+    ],
+    "logging_disabled": false,
+    "unlogged_policies": [
+      "2 (disabled-rule)"
+    ],
+    "unused_addr_groups": [
+      "GRP1"
+    ],
+    "unused_addresses": [
+      "SITE-FQDN",
+      "UNUSED-ADDR"
+    ],
+    "unused_services": [
+      "UNUSED-SVC"
+    ]
+  },
+  "vips": [
+    {
+      "extintf": "port1",
+      "extip": "203.0.113.20",
+      "extport": "443",
+      "mappedip": "192.168.1.10",
+      "mappedport": "443",
+      "name": "WEB-VIP"
+    }
+  ],
+  "vlans": [
+    {
+      "id": "10",
+      "ip": "10.0.10.1/24",
+      "name": "vlan10",
+      "parent": "port2"
+    }
+  ],
+  "vpn": {
+    "phase1": [
+      "vpn-hq"
+    ],
+    "phase2": [
+      "vpn-hq-p2"
+    ]
+  }
+}
