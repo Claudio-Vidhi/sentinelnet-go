@@ -21,7 +21,7 @@ func (a *App) handleConfigAnalyzerAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	backupDir := a.cfg.BackupDir()
-	results := []*configanalyzer.DeviceResult{}
+	results := []any{}
 	for _, d := range devices {
 		g := d.Tenant
 		if g == "" {
@@ -33,7 +33,7 @@ func (a *App) handleConfigAnalyzerAll(w http.ResponseWriter, r *http.Request) {
 		if group != "" && group != "all" && g != group {
 			continue
 		}
-		if res := configanalyzer.AnalyzeDevice(backupDir, d.IP, d.Tenant, d.Hostname); res != nil {
+		if res := configanalyzer.AnalyzeDevice(backupDir, d.IP, d.Vendor, d.Tenant, d.Hostname); res != nil {
 			results = append(results, res)
 		}
 	}
@@ -52,9 +52,9 @@ func (a *App) handleConfigAnalyzerDevice(w http.ResponseWriter, r *http.Request)
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	invGroup, invHostname := "", ""
+	invGroup, invHostname, vendor := "", "", ""
 	if dev != nil {
-		invGroup, invHostname = dev.Tenant, dev.Hostname
+		invGroup, invHostname, vendor = dev.Tenant, dev.Hostname, dev.Vendor
 		if scoped != nil {
 			g := dev.Tenant
 			if g == "" {
@@ -67,7 +67,7 @@ func (a *App) handleConfigAnalyzerDevice(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	res := configanalyzer.AnalyzeDevice(a.cfg.BackupDir(), ip, invGroup, invHostname)
+	res := configanalyzer.AnalyzeDevice(a.cfg.BackupDir(), ip, vendor, invGroup, invHostname)
 	if res == nil {
 		writeErr(w, http.StatusNotFound, "Nessun backup trovato per "+ip+".")
 		return

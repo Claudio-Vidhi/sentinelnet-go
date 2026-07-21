@@ -188,3 +188,27 @@ precedenza env `SENTINELNET_PORT` > valore salvato > 8000, ed è coperto da test
 **Effetto**: il pannello "impostazioni avanzate" mostra il solo campo porta. Se in
 futuro il Go acquisisce TLS e CORS, le chiavi vanno riaperte qui insieme alla
 funzione — non prima.
+
+---
+
+## 10. Config analyzer: WLC AireOS analizzato come IOS (temporaneo)
+
+**Python** (`ai/config_analyzer.py`, `analyze_device`): per un backup rilevato
+come `wlc-aireos` usa `analyze_wlc_config`, un analizzatore strutturato dedicato
+(SSID/WLAN, interfacce, RF, ecc.).
+
+**Go** (`internal/configanalyzer/backup.go`): il dispatch gestisce `ios`,
+`fortios` e `panos`. Un backup `wlc-aireos` ricade nel ramo IOS e viene
+analizzato con `AnalyzeConfig`, esattamente come prima che il dispatch
+esistesse.
+
+**Motivo**: `analyze_wlc_config` (~160 righe) è un porting a sé, rinviato per
+tenere piccolo l'intervento sul dispatch. Non è una regressione — è il
+comportamento già in essere nel port Go — ma è una divergenza dichiarata
+finché l'analizzatore AireOS non viene portato.
+
+**Effetto**: la vista config-analyzer di un controller AireOS mostra i campi
+IOS (spesso vuoti o parziali) invece di quelli wireless. `config_type` è
+comunque riportato correttamente come `wlc-aireos`.
+
+**Stato**: da completare insieme al resto del dominio D (converter e MCP/AI).
