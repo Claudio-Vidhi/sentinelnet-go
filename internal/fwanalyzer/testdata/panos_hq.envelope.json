@@ -1,0 +1,324 @@
+{
+  "sections": [
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "type",
+          "label_key": "fw.col.type"
+        },
+        {
+          "key": "value",
+          "label_key": "fw.col.value"
+        }
+      ],
+      "id": "addresses",
+      "label_key": "fw.sec.addresses",
+      "rows": [
+        {
+          "name": "LAN",
+          "type": "ip-netmask",
+          "value": "192.168.1.0/24"
+        },
+        {
+          "name": "SRV",
+          "type": "ip-netmask",
+          "value": "192.168.1.10/32"
+        },
+        {
+          "name": "RANGE",
+          "type": "ip-range",
+          "value": "10.0.0.1-10.0.0.50"
+        },
+        {
+          "name": "SITE",
+          "type": "fqdn",
+          "value": "example.com"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "members",
+          "label_key": "fw.col.members"
+        }
+      ],
+      "id": "address_groups",
+      "label_key": "fw.sec.address_groups",
+      "rows": [
+        {
+          "members": "LAN, SRV",
+          "name": "GRP"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "protocol",
+          "label_key": "fw.col.protocol"
+        },
+        {
+          "key": "port",
+          "label_key": "fw.col.port"
+        }
+      ],
+      "id": "services",
+      "label_key": "fw.sec.services",
+      "rows": [
+        {
+          "name": "HTTPS",
+          "port": "443",
+          "protocol": "tcp"
+        },
+        {
+          "name": "DNS",
+          "port": "53",
+          "protocol": "udp"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "members",
+          "label_key": "fw.col.members"
+        }
+      ],
+      "id": "service_groups",
+      "label_key": "fw.sec.service_groups",
+      "rows": [
+        {
+          "members": "HTTPS, DNS",
+          "name": "WEBSVC"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "from",
+          "label_key": "fw.col.from"
+        },
+        {
+          "key": "to",
+          "label_key": "fw.col.to"
+        },
+        {
+          "key": "source",
+          "label_key": "fw.col.source"
+        },
+        {
+          "key": "destination",
+          "label_key": "fw.col.destination"
+        },
+        {
+          "key": "application",
+          "label_key": "fw.col.application"
+        },
+        {
+          "key": "service",
+          "label_key": "fw.col.service"
+        },
+        {
+          "key": "action",
+          "label_key": "fw.col.action"
+        }
+      ],
+      "id": "security_rules",
+      "label_key": "fw.sec.security_rules",
+      "rows": [
+        {
+          "action": "allow",
+          "application": "web-browsing, ssl",
+          "destination": "any",
+          "from": "trust",
+          "name": "Allow-Web",
+          "service": "HTTPS",
+          "source": "LAN",
+          "to": "untrust"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "from",
+          "label_key": "fw.col.from"
+        },
+        {
+          "key": "to",
+          "label_key": "fw.col.to"
+        },
+        {
+          "key": "source",
+          "label_key": "fw.col.source"
+        },
+        {
+          "key": "destination",
+          "label_key": "fw.col.destination"
+        },
+        {
+          "key": "service",
+          "label_key": "fw.col.service"
+        },
+        {
+          "key": "translation",
+          "label_key": "fw.col.translation"
+        }
+      ],
+      "id": "nat_rules",
+      "label_key": "fw.sec.nat_rules",
+      "rows": [
+        {
+          "destination": "any",
+          "from": "trust",
+          "name": "SNAT",
+          "service": "any",
+          "source": "LAN",
+          "to": "untrust",
+          "translation": "ethernet1/1"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "interfaces",
+          "label_key": "fw.col.interfaces"
+        }
+      ],
+      "id": "zones",
+      "label_key": "fw.sec.zones",
+      "rows": [
+        {
+          "interfaces": "ethernet1/2, ethernet1/3",
+          "name": "trust"
+        },
+        {
+          "interfaces": "ethernet1/1",
+          "name": "untrust"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "kind",
+          "label_key": "fw.col.kind"
+        },
+        {
+          "key": "peer",
+          "label_key": "fw.col.peer"
+        },
+        {
+          "key": "interface",
+          "label_key": "fw.col.interface"
+        }
+      ],
+      "id": "vpn_ipsec",
+      "label_key": "fw.sec.vpn_ipsec",
+      "rows": [
+        {
+          "interface": "ethernet1/1",
+          "kind": "ike-gateway",
+          "name": "GW1",
+          "peer": "198.51.100.1"
+        },
+        {
+          "interface": "tunnel.1",
+          "kind": "ipsec-tunnel",
+          "name": "TUN1",
+          "peer": "GW1"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "role",
+          "label_key": "fw.col.role"
+        }
+      ],
+      "id": "administrators",
+      "label_key": "fw.sec.administrators",
+      "rows": [
+        {
+          "name": "admin",
+          "role": "superuser"
+        },
+        {
+          "name": "viewer",
+          "role": "readonly"
+        }
+      ]
+    },
+    {
+      "columns": [
+        {
+          "key": "name",
+          "label_key": "fw.col.name"
+        },
+        {
+          "key": "kind",
+          "label_key": "fw.col.kind"
+        },
+        {
+          "key": "server",
+          "label_key": "fw.col.server"
+        }
+      ],
+      "id": "authentication",
+      "label_key": "fw.sec.authentication",
+      "rows": [
+        {
+          "kind": "auth-profile",
+          "name": "AUTH1",
+          "server": "radius"
+        },
+        {
+          "kind": "radius",
+          "name": "RAD1",
+          "server": "10.0.0.10"
+        }
+      ]
+    }
+  ],
+  "vendor": "panos"
+}

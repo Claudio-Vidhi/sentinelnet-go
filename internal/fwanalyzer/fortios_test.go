@@ -16,15 +16,7 @@ func TestAnalyzeFortiOSMatchesPythonGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := AnalyzeFortiOS(string(raw))
-
-	// Confronto sul JSON con chiavi ordinate, come il golden (sort_keys=True).
-	gotJSON, err := json.MarshalIndent(got, "", "  ")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Ri-normalizza attraverso una struttura generica per ordinare le chiavi
-	// esattamente come json.dumps(sort_keys=True) del Python.
-	gotNorm := normalizeJSON(t, gotJSON)
+	gotNorm := marshalNorm(t, got)
 
 	wantRaw, err := os.ReadFile(filepath.Join("testdata", "fortios_hq.envelope.json"))
 	if err != nil {
@@ -38,7 +30,9 @@ func TestAnalyzeFortiOSMatchesPythonGolden(t *testing.T) {
 }
 
 // normalizeJSON decodifica e ri-serializza con chiavi ordinate, così il
-// confronto non dipende dall'ordine di marshalling.
+// confronto non dipende dall'ordine di marshalling. Go ordina le chiavi delle
+// mappe in MarshalIndent, che è ciò che rende il confronto stabile contro il
+// golden Python generato con sort_keys=True.
 func normalizeJSON(t *testing.T, b []byte) string {
 	t.Helper()
 	var v any
@@ -50,6 +44,16 @@ func normalizeJSON(t *testing.T, b []byte) string {
 		t.Fatal(err)
 	}
 	return string(out)
+}
+
+// marshalNorm serializza un valore e lo normalizza a chiavi ordinate.
+func marshalNorm(t *testing.T, v any) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return normalizeJSON(t, b)
 }
 
 // L'analizzatore non deve mai sollevare: input vuoto o spazzatura danno un
