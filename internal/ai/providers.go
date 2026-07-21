@@ -277,7 +277,7 @@ func chatOllama(msgs []Message, model, apiKey, baseURL string, timeout time.Dura
 		return "", err
 	}
 	if status >= 400 {
-		return "", providerHTTPError("Ollama", status, body)
+		return "", &Error{Msg: fmt.Sprintf("Ollama endpoint error %d: %s", status, truncateRunes(string(body), 500))}
 	}
 	var data struct {
 		Message struct {

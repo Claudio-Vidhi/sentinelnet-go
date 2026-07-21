@@ -293,6 +293,34 @@ func TestChatOllamaBuildsRequestAndParses(t *testing.T) {
 	}
 }
 
+func TestChatOllamaHTTPErrorIsPlainError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(429)
+		w.Write([]byte("rate limited by local server"))
+	}))
+	defer srv.Close()
+
+	_, err := chatOllama([]Message{{"user", "hi"}}, "llama3", "", srv.URL, 5*time.Second)
+
+	var e *Error
+	if !asErr(err, &e) {
+		t.Fatalf("expected *Error, got %v (%T)", err, err)
+	}
+	var rl *RateLimitError
+	if asRateLimit(err, &rl) {
+		t.Fatalf("Ollama HTTP error must NOT be *RateLimitError, got %v", err)
+	}
+	if !strings.Contains(e.Msg, "Ollama endpoint error") {
+		t.Errorf("msg = %q, want to contain %q", e.Msg, "Ollama endpoint error")
+	}
+	if strings.Contains(e.Msg, "API error") {
+		t.Errorf("msg = %q, must not contain %q", e.Msg, "API error")
+	}
+	if strings.Contains(e.Msg, "Quota del provider") {
+		t.Errorf("msg = %q, must not contain %q", e.Msg, "Quota del provider")
+	}
+}
+
 func TestChatOllamaDefaultBaseURLUsesLocalhost(t *testing.T) {
 	// No live server on localhost:11434 expected in CI; just confirm the
 	// call attempts to reach the default host by checking the error mentions
