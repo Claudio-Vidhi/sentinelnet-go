@@ -26,26 +26,32 @@ func panosTokens(s string) []string {
 	return out
 }
 
-// panosLine è una riga "set" già tokenizzata (senza il "set" iniziale).
-type panosLine struct{ toks []string }
+// panosLine è una riga "set" già tokenizzata (senza il "set" iniziale). raw è
+// la riga originale ripulita, che serve ai converter per riportare la sorgente.
+type panosLine struct {
+	toks []string
+	raw  string
+}
 
 // panosLines ritorna le righe che iniziano con "set ", tokenizzate.
 func panosLines(text string) []panosLine {
 	var out []panosLine
-	for _, raw := range strings.Split(text, "\n") {
-		s := strings.TrimSpace(raw)
+	for _, line := range strings.Split(text, "\n") {
+		s := strings.TrimSpace(line)
 		if s == "" || !strings.HasPrefix(strings.ToLower(s), "set ") {
 			continue
 		}
-		out = append(out, panosLine{toks: panosTokens(s[4:])})
+		out = append(out, panosLine{toks: panosTokens(s[4:]), raw: s})
 	}
 	return out
 }
 
-// panosEntry raccoglie le "parts" (token dopo il nome) di un oggetto.
+// panosEntry raccoglie le "parts" (token dopo il nome) di un oggetto e le
+// righe grezze che lo compongono.
 type panosEntry struct {
 	name  string
 	parts [][]string
+	raw   []string
 }
 
 // panosCollect raggruppa le righe il cui path inizia con prefix e ha un nome
@@ -79,6 +85,7 @@ func panosCollect(lines []panosLine, prefix ...string) []panosEntry {
 		if rest := ln.toks[n+1:]; len(rest) > 0 {
 			e.parts = append(e.parts, rest)
 		}
+		e.raw = append(e.raw, ln.raw)
 	}
 	out := make([]panosEntry, len(order))
 	for i, e := range order {
@@ -126,6 +133,29 @@ func (e panosEntry) first(path ...string) string {
 		return vals[0]
 	}
 	return ""
+}
+
+// attr ritorna il primo valore dell'attributo a un solo token (part[0]==attr),
+// senza gestione delle liste tra parentesi. È l'_panos_attr del Python, usato
+// dai converter dove i valori sono singoli.
+func (e panosEntry) attr(attr string) string {
+	for _, p := range e.parts {
+		if len(p) > 1 && strings.EqualFold(p[0], attr) {
+			return p[1]
+		}
+	}
+	return ""
+}
+
+// attrAll ritorna tutti i valori dell'attributo a un solo token.
+func (e panosEntry) attrAll(attr string) []string {
+	var out []string
+	for _, p := range e.parts {
+		if len(p) > 1 && strings.EqualFold(p[0], attr) {
+			out = append(out, p[1])
+		}
+	}
+	return out
 }
 
 // serverAddr: "server <SRV> address <IP>" (o ip-address/host) -> primo IP.

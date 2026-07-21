@@ -1,0 +1,71 @@
+{
+  "mapped": [
+    {
+      "note": "",
+      "source": "config system interface\n    edit \"port1\"\n        set vdom root\n        set ip 203.0.113.10 255.255.255.248\n        set allowaccess ping https ssh http\n        set role wan\n        set status up\n    next\nend",
+      "target": "set network interface ethernet port1 layer3 ip 203.0.113.10/29"
+    },
+    {
+      "note": "",
+      "source": "config system interface\n    edit \"port2\"\n        set vdom root\n        set ip 192.168.1.1 255.255.255.0\n        set allowaccess ping https\n    next\nend",
+      "target": "set network interface ethernet port2 layer3 ip 192.168.1.1/24"
+    },
+    {
+      "note": "",
+      "source": "config system interface\n    edit \"vlan10\"\n        set vdom root\n        set ip 10.0.10.1 255.255.255.0\n        set interface port2\n        set vlanid 10\n    next\nend",
+      "target": "set network interface ethernet vlan10 layer3 ip 10.0.10.1/24"
+    },
+    {
+      "note": "",
+      "source": "config firewall address\n    edit \"LAN\"\n        set subnet 192.168.1.0 255.255.255.0\n        set comment \"rete interna\"\n    next\nend",
+      "target": "set address LAN ip-netmask 192.168.1.0/24"
+    },
+    {
+      "note": "",
+      "source": "config firewall address\n    edit \"SRV\"\n        set subnet 192.168.1.10 255.255.255.255\n    next\nend",
+      "target": "set address SRV ip-netmask 192.168.1.10/32"
+    },
+    {
+      "note": "",
+      "source": "config firewall address\n    edit \"UNUSED-ADDR\"\n        set subnet 10.9.9.0 255.255.255.0\n    next\nend",
+      "target": "set address UNUSED-ADDR ip-netmask 10.9.9.0/24"
+    },
+    {
+      "note": "",
+      "source": "config firewall service custom\n    edit \"HTTPS\"\n        set protocol TCP\n        set tcp-portrange 443\n    next\nend",
+      "target": "set service HTTPS protocol tcp port 443"
+    },
+    {
+      "note": "",
+      "source": "config firewall service custom\n    edit \"UNUSED-SVC\"\n        set protocol TCP\n        set tcp-portrange 9999\n    next\nend",
+      "target": "set service UNUSED-SVC protocol tcp port 9999"
+    },
+    {
+      "note": "interfaccia in uscita FortiOS 'port1' non riportata (PAN-OS usa il virtual-router)",
+      "source": "config router static\n    edit \"1\"\n        set dst 0.0.0.0 0.0.0.0\n        set gateway 203.0.113.9\n        set device port1\n    next\nend",
+      "target": "set network virtual-router default routing-table ip static-route route-1 destination 0.0.0.0/0\nset network virtual-router default routing-table ip static-route route-1 nexthop ip-address 203.0.113.9"
+    },
+    {
+      "note": "NAT abilitato: regola NAT creata come anteprima separata, verificare source-translation",
+      "source": "config firewall policy\n    edit \"1\"\n        set name LAN-to-WAN\n        set srcintf port2\n        set dstintf port1\n        set srcaddr all\n        set dstaddr all\n        set service HTTPS\n        set action accept\n        set nat enable\n        set status enable\n        set schedule always\n        set logtraffic all\n    next\nend",
+      "target": "set rulebase security rules \"LAN-to-WAN\" from port2\nset rulebase security rules \"LAN-to-WAN\" to port1\nset rulebase security rules \"LAN-to-WAN\" source all\nset rulebase security rules \"LAN-to-WAN\" destination all\nset rulebase security rules \"LAN-to-WAN\" service HTTPS\nset rulebase security rules \"LAN-to-WAN\" action allow\nset rulebase nat rules \"LAN-to-WAN\" from port2\nset rulebase nat rules \"LAN-to-WAN\" to port1"
+    },
+    {
+      "note": "",
+      "source": "config firewall policy\n    edit \"2\"\n        set name disabled-rule\n        set srcintf port2\n        set dstintf port1\n        set srcaddr LAN\n        set dstaddr SRV\n        set service HTTPS\n        set action accept\n        set status disable\n        set logtraffic disable\n    next\nend",
+      "target": "set rulebase security rules \"disabled-rule\" from port2\nset rulebase security rules \"disabled-rule\" to port1\nset rulebase security rules \"disabled-rule\" source LAN\nset rulebase security rules \"disabled-rule\" destination SRV\nset rulebase security rules \"disabled-rule\" service HTTPS\nset rulebase security rules \"disabled-rule\" action allow"
+    }
+  ],
+  "preview_text": "! Anteprima conversione fortios -> panos — SentinelNet Config Converter\n! 11 elementi mappati, 9 non mappati (vedi elenco 'unmapped').\n\nset network interface ethernet port1 layer3 ip 203.0.113.10/29\n\nset network interface ethernet port2 layer3 ip 192.168.1.1/24\n\nset network interface ethernet vlan10 layer3 ip 10.0.10.1/24\n\nset address LAN ip-netmask 192.168.1.0/24\n\nset address SRV ip-netmask 192.168.1.10/32\n\nset address UNUSED-ADDR ip-netmask 10.9.9.0/24\n\nset service HTTPS protocol tcp port 443\n\nset service UNUSED-SVC protocol tcp port 9999\n\nset network virtual-router default routing-table ip static-route route-1 destination 0.0.0.0/0\nset network virtual-router default routing-table ip static-route route-1 nexthop ip-address 203.0.113.9\n\nset rulebase security rules \"LAN-to-WAN\" from port2\nset rulebase security rules \"LAN-to-WAN\" to port1\nset rulebase security rules \"LAN-to-WAN\" source all\nset rulebase security rules \"LAN-to-WAN\" destination all\nset rulebase security rules \"LAN-to-WAN\" service HTTPS\nset rulebase security rules \"LAN-to-WAN\" action allow\nset rulebase nat rules \"LAN-to-WAN\" from port2\nset rulebase nat rules \"LAN-to-WAN\" to port1\n\nset rulebase security rules \"disabled-rule\" from port2\nset rulebase security rules \"disabled-rule\" to port1\nset rulebase security rules \"disabled-rule\" source LAN\nset rulebase security rules \"disabled-rule\" destination SRV\nset rulebase security rules \"disabled-rule\" service HTTPS\nset rulebase security rules \"disabled-rule\" action allow\n",
+  "unmapped": [
+    "config firewall address\n    edit \"SITE-FQDN\"\n        set type fqdn\n        set fqdn example.com\n    next\nend",
+    "config system zone\n    edit \"trust\"\n        set interface port2 vlan10\n    next\nend",
+    "config firewall addrgrp\n    edit \"GRP1\"\n        set member LAN SRV\n    next\nend",
+    "config firewall vip\n    edit \"WEB-VIP\"\n        set extip 203.0.113.20\n        set mappedip 192.168.1.10\n        set extintf port1\n        set extport 443\n        set mappedport 443\n    next\nend",
+    "config system admin\n    edit \"admin\"\n        set accprofile super_admin\n        set trusthost1 10.0.0.0 255.255.255.0\n    next\nend",
+    "config system admin\n    edit \"noguard\"\n        set accprofile super_admin\n    next\nend",
+    "config vpn ipsec phase1-interface\n    edit \"vpn-hq\"\n        set remote-gw 198.51.100.1\n        set interface port1\n        set proposal aes256-sha256\n    next\nend",
+    "config vpn ipsec phase2-interface\n    edit \"vpn-hq-p2\"\n        set phase1name vpn-hq\n    next\nend",
+    "config log syslogd setting\n        set status enable\nend"
+  ]
+}

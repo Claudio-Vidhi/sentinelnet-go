@@ -4,8 +4,61 @@ import (
 	"net/http"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/configanalyzer"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/fwanalyzer"
 	"github.com/go-chi/chi/v5"
 )
+
+type convertReq struct {
+	Text   string `json:"text"`
+	IP     string `json:"ip"`
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
+// handleConfigAnalyzerConvert: POST /api/config-analyzer/convert — conversione
+// deterministica (preview) FortiOS <-> PAN-OS. Accetta testo esplicito oppure
+// {ip} -> backup più recente del dispositivo (con scoping per sede).
+func (a *App) handleConfigAnalyzerConvert(w http.ResponseWriter, r *http.Request) {
+	var req convertReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+
+	text := req.Text
+	fromIP := false
+	if text == "" && req.IP != "" {
+		// Il backup di un dispositivo: risolto con lo scoping per sede, come le
+		// altre rotte del config analyzer.
+		if _, ok := a.assertDeviceAllowed(w, r, req.IP); !ok {
+			return
+		}
+		t, ok := configanalyzer.LoadBackupRunningConfig(a.cfg.BackupDir(), req.IP)
+		if !ok {
+			writeErr(w, http.StatusNotFound, "Nessun backup trovato per "+req.IP+".")
+			return
+		}
+		text, fromIP = t, true
+	}
+	if text == "" {
+		writeErr(w, http.StatusBadRequest, "Fornire 'text' oppure 'ip'.")
+		return
+	}
+
+	res, err := fwanalyzer.ConvertConfig(text, req.Source, req.Target)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	out := map[string]any{
+		"mapped": res.Mapped, "unmapped": res.Unmapped, "preview_text": res.PreviewText,
+	}
+	if fromIP {
+		out["source_text"] = text
+	}
+	writeJSON(w, http.StatusOK, out)
+}
 
 // handleConfigAnalyzerAll: GET /api/config-analyzer?group=all — analizza tutti i
 // dispositivi in inventario che hanno un backup, applicando lo scoping per sede

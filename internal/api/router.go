@@ -193,6 +193,7 @@ func (a *App) Router() http.Handler {
 
 	// --- Config Analyzer (auth read, tenant-scoped) ---
 	r.Get("/api/config-analyzer", a.requireAuth("", a.handleConfigAnalyzerAll))
+	r.Post("/api/config-analyzer/convert", a.requireAuth("", a.handleConfigAnalyzerConvert))
 	r.Get("/api/config-analyzer/{ip}", a.requireAuth("", a.handleConfigAnalyzerDevice))
 
 	// --- Settings (adm) ---

@@ -45,6 +45,27 @@ func FindFreshestBackup(backupDir, ip string) (string, string) {
 
 var rePanosHostname = regexp.MustCompile(`(?m)^set deviceconfig system hostname (\S+)`)
 
+// RunningConfigText ritorna la sola parte running-config del backup, unita in
+// una stringa. È ciò che il convert route dà in pasto al converter quando la
+// sorgente è un IP invece di testo esplicito.
+func RunningConfigText(content string) string {
+	return strings.Join(runningConfig(content), "\n")
+}
+
+// LoadBackupRunningConfig legge il backup più recente per l'IP e ne ritorna la
+// running-config come testo. ("", false) se non c'è backup o non è leggibile.
+func LoadBackupRunningConfig(backupDir, ip string) (string, bool) {
+	path, _ := FindFreshestBackup(backupDir, ip)
+	if path == "" {
+		return "", false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	return RunningConfigText(string(data)), true
+}
+
 // AnalyzeDevice legge il backup piu' recente per l'IP e ritorna analisi + meta.
 // vendor/invGroup/invHostname provengono dall'inventario (possono essere ""):
 // il vendor guida il rilevamento del tipo, il gruppo ha priorita' sul tenant

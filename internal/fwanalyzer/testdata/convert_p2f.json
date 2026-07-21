@@ -1,0 +1,53 @@
+{
+  "mapped": [
+    {
+      "note": "",
+      "source": "set address LAN ip-netmask 192.168.1.0/24",
+      "target": "config firewall address\n    edit \"LAN\"\n        set subnet 192.168.1.0 255.255.255.0\n    next\nend"
+    },
+    {
+      "note": "",
+      "source": "set address SRV ip-netmask 192.168.1.10/32",
+      "target": "config firewall address\n    edit \"SRV\"\n        set subnet 192.168.1.10 255.255.255.255\n    next\nend"
+    },
+    {
+      "note": "",
+      "source": "set service HTTPS protocol tcp port 443",
+      "target": "config firewall service custom\n    edit \"HTTPS\"\n        set tcp-portrange 443\n    next\nend"
+    },
+    {
+      "note": "",
+      "source": "set service DNS protocol udp port 53",
+      "target": "config firewall service custom\n    edit \"DNS\"\n        set udp-portrange 53\n    next\nend"
+    },
+    {
+      "note": "",
+      "source": "set rulebase security rules Allow-Web from trust\nset rulebase security rules Allow-Web to untrust\nset rulebase security rules Allow-Web source LAN\nset rulebase security rules Allow-Web destination any\nset rulebase security rules Allow-Web application [ web-browsing ssl ]\nset rulebase security rules Allow-Web service HTTPS\nset rulebase security rules Allow-Web action allow",
+      "target": "config firewall policy\n    edit 1\n        set name \"Allow-Web\"\n        set srcintf \"trust\"\n        set dstintf \"untrust\"\n        set srcaddr \"LAN\"\n        set dstaddr \"any\"\n        set service \"HTTPS\"\n        set action accept\n    next\nend"
+    }
+  ],
+  "preview_text": "# Anteprima conversione panos -> fortios — SentinelNet Config Converter\n# 5 elementi mappati, 21 non mappati (vedi elenco 'unmapped').\n\nconfig firewall address\n    edit \"LAN\"\n        set subnet 192.168.1.0 255.255.255.0\n    next\nend\n\nconfig firewall address\n    edit \"SRV\"\n        set subnet 192.168.1.10 255.255.255.255\n    next\nend\n\nconfig firewall service custom\n    edit \"HTTPS\"\n        set tcp-portrange 443\n    next\nend\n\nconfig firewall service custom\n    edit \"DNS\"\n        set udp-portrange 53\n    next\nend\n\nconfig firewall policy\n    edit 1\n        set name \"Allow-Web\"\n        set srcintf \"trust\"\n        set dstintf \"untrust\"\n        set srcaddr \"LAN\"\n        set dstaddr \"any\"\n        set service \"HTTPS\"\n        set action accept\n    next\nend\n",
+  "unmapped": [
+    "set address RANGE ip-range 10.0.0.1-10.0.0.50",
+    "set address SITE fqdn example.com",
+    "set deviceconfig system hostname PA-HQ",
+    "set address-group GRP static [ LAN SRV ]",
+    "set service-group WEBSVC members [ HTTPS DNS ]",
+    "set zone trust network layer3 [ ethernet1/2 ethernet1/3 ]",
+    "set zone untrust network layer3 ethernet1/1",
+    "set rulebase nat rules SNAT from trust",
+    "set rulebase nat rules SNAT to untrust",
+    "set rulebase nat rules SNAT source LAN",
+    "set rulebase nat rules SNAT destination any",
+    "set rulebase nat rules SNAT service any",
+    "set rulebase nat rules SNAT source-translation dynamic-ip-and-port translated-address ethernet1/1",
+    "set network ike gateway GW1 peer-address ip 198.51.100.1",
+    "set network ike gateway GW1 local-address interface ethernet1/1",
+    "set network tunnel ipsec TUN1 auto-key ike-gateway GW1",
+    "set network tunnel ipsec TUN1 tunnel-interface tunnel.1",
+    "set mgt-config users admin permissions role-based superuser yes",
+    "set mgt-config users viewer permissions role-based custom profile readonly",
+    "set shared authentication-profile AUTH1 method radius",
+    "set shared server-profile radius RAD1 server SRV1 address 10.0.0.10"
+  ]
+}
