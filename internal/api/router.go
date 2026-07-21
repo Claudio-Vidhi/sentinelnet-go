@@ -206,6 +206,11 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/settings/app", a.requireAuth("admin", a.handleGetAppSettings))
 	r.Post("/api/settings/app", a.requireAuth("admin", a.handleSetAppSettings))
 
+	// MCP server (config tool esposti al processo `sentinelnet mcp`)
+	r.Get("/api/mcp/settings", a.requireAuth("admin", a.handleGetMCPSettings))
+	r.Post("/api/mcp/settings", a.requireAuth("admin", a.handleSetMCPSettings))
+	r.Get("/api/mcp/tool-config", a.requireAuth("", a.handleGetMCPToolConfig))
+
 	// --- WS terminal ---
 	r.Post("/api/ws-token", a.requireAuth("operator", a.handleWSToken))
 	r.Get("/api/ws-terminal/{ip}", a.handleWSTerminal) // auth via OTP nella query
