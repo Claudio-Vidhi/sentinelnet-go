@@ -1,0 +1,49 @@
+{
+  "args": {
+    "tenant": "Sede A",
+    "devices": [
+      {
+        "IP": "10.0.0.1",
+        "Hostname": "SW1",
+        "Vendor": "cisco_ios",
+        "Site": "central"
+      },
+      {
+        "IP": "10.0.0.2",
+        "Hostname": "",
+        "Vendor": "cisco_ios",
+        "Site": "vpn1"
+      }
+    ],
+    "group_info": {
+      "description": "Filiale nord"
+    },
+    "site": [
+      {
+        "id": "vpn1",
+        "name": "VPN1",
+        "mode": "agent",
+        "subnets": [
+          "10.0.0.0/24"
+        ],
+        "last_seen": "2026-07-20"
+      }
+    ],
+    "mac_stats": {
+      "sightings": 120,
+      "unique_macs": 40,
+      "switches": 3,
+      "retention_days": 30
+    },
+    "mac_recent": [
+      {
+        "mac": "aa:bb:cc:dd:ee:ff",
+        "switch_ip": "10.0.0.1",
+        "interface": "Gi0/1",
+        "vlan": "10",
+        "last_seen": "2026-07-20"
+      }
+    ]
+  },
+  "want": "## Contesto sede/tenant: Sede A\nDescrizione: Filiale nord\nConfig sito VPN 'VPN1': mode=agent, subnets=10.0.0.0/24, last_seen=2026-07-20\n\nDispositivi (2 totali):\n- 10.0.0.1 | SW1 | vendor=cisco_ios | site=central\n- 10.0.0.2 | (senza hostname) | vendor=cisco_ios | site=vpn1\n\nMAC history: 120 avvistamenti, 40 MAC unici, 3 switch coinvolti, retention=30gg\n\nUltimi avvistamenti MAC (max 15):\n- aa:bb:cc:dd:ee:ff su switch 10.0.0.1 if=Gi0/1 vlan=10 last_seen=2026-07-20"
+}

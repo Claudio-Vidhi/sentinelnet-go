@@ -37,6 +37,29 @@ func TestFitContextGolden(t *testing.T) {
 	}
 }
 
+func TestBuildTenantContextGolden(t *testing.T) {
+	var golden struct {
+		Args struct {
+			Tenant    string
+			Devices   []map[string]any
+			GroupInfo map[string]any `json:"group_info"`
+			Site      []map[string]any
+			MacStats  map[string]any   `json:"mac_stats"`
+			MacRecent []map[string]any `json:"mac_recent"`
+		}
+		Want string
+	}
+	readJSON(t, "tenant_context.json", &golden)
+	got := BuildTenantContext(TenantContextArgs{
+		Tenant: golden.Args.Tenant, Devices: golden.Args.Devices,
+		GroupInfo: golden.Args.GroupInfo, Site: golden.Args.Site,
+		MacStats: golden.Args.MacStats, MacRecent: golden.Args.MacRecent,
+	})
+	if got != golden.Want {
+		t.Errorf("BuildTenantContext diverso dal Python\n--- Go ---\n%s\n--- Py ---\n%s", got, golden.Want)
+	}
+}
+
 func readJSON(t *testing.T, name string, dst any) {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join("testdata", name))

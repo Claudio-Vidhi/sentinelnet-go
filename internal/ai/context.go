@@ -1,8 +1,10 @@
 package ai
 
 import (
+	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -224,4 +226,158 @@ func FitContext(blocks []string, budget int, question string) []string {
 		}
 	}
 	return out
+}
+
+// TenantContextArgs sono gli argomenti di BuildTenantContext (dati già
+// filtrati dal chiamante per UN SOLO tenant/sede).
+type TenantContextArgs struct {
+	Tenant                string
+	Devices               []map[string]any
+	GroupInfo             map[string]any
+	Site                  []map[string]any
+	MacStats              map[string]any
+	MacRecent             []map[string]any
+	ScanSummary           string
+	MaxDevices, MaxRecent int // 0 => 100 / 15
+}
+
+// asStr converte un valore JSON generico nella sua rappresentazione stringa,
+// riproducendo str(v) di Python: i numeri interi (arrivano come float64 da
+// encoding/json) sono resi senza ".0".
+func asStr(v any) string {
+	switch x := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return x
+	case float64:
+		if x == float64(int64(x)) {
+			return strconv.FormatInt(int64(x), 10)
+		}
+		return strconv.FormatFloat(x, 'g', -1, 64)
+	default:
+		return fmt.Sprintf("%v", x)
+	}
+}
+
+// mapGet riproduce d.get(key, def): ritorna def solo se la chiave e' assente.
+func mapGet(m map[string]any, key, def string) string {
+	if m == nil {
+		return def
+	}
+	v, ok := m[key]
+	if !ok {
+		return def
+	}
+	return asStr(v)
+}
+
+// mapGetOr riproduce d.get(key, "") or def: ritorna def se la chiave e'
+// assente o il valore e' falsy (stringa vuota).
+func mapGetOr(m map[string]any, key, def string) string {
+	if m == nil {
+		return def
+	}
+	v, ok := m[key]
+	if !ok {
+		return def
+	}
+	s := asStr(v)
+	if s == "" {
+		return def
+	}
+	return s
+}
+
+// asStrSlice converte un []any (elementi JSON generici) in []string.
+func asStrSlice(v any) []string {
+	arr, ok := v.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, e := range arr {
+		out = append(out, asStr(e))
+	}
+	return out
+}
+
+// BuildTenantContext costruisce un blocco di contesto compatto (markdown)
+// con le informazioni rilevanti per UN SOLO tenant/sede, da usare come
+// messaggio di sistema iniettato nella richiesta AI. Porta di
+// build_tenant_context: e' un puro formattatore, non applica alcun filtro
+// (il chiamante deve aver già filtrato devices/mac_stats/mac_recent).
+func BuildTenantContext(a TenantContextArgs) string {
+	maxDevices := a.MaxDevices
+	if maxDevices == 0 {
+		maxDevices = 100
+	}
+	maxRecent := a.MaxRecent
+	if maxRecent == 0 {
+		maxRecent = 15
+	}
+
+	lines := []string{fmt.Sprintf("## Contesto sede/tenant: %s", a.Tenant)}
+
+	if len(a.GroupInfo) > 0 {
+		desc := mapGet(a.GroupInfo, "description", "")
+		if desc != "" {
+			lines = append(lines, fmt.Sprintf("Descrizione: %s", desc))
+		}
+	}
+
+	for _, s := range a.Site {
+		name := mapGet(s, "name", mapGet(s, "id", "?"))
+		mode := mapGet(s, "mode", "?")
+		subnets := strings.Join(asStrSlice(s["subnets"]), ", ")
+		if subnets == "" {
+			subnets = "(nessuna)"
+		}
+		lastSeen := mapGetOr(s, "last_seen", "mai")
+		lines = append(lines, fmt.Sprintf(
+			"Config sito VPN '%s': mode=%s, subnets=%s, last_seen=%s",
+			name, mode, subnets, lastSeen))
+	}
+
+	lines = append(lines, fmt.Sprintf("\nDispositivi (%d totali):", len(a.Devices)))
+	devices := a.Devices
+	if len(devices) > maxDevices {
+		devices = devices[:maxDevices]
+	}
+	for _, d := range devices {
+		lines = append(lines, fmt.Sprintf(
+			"- %s | %s | vendor=%s | site=%s",
+			mapGet(d, "IP", "?"), mapGetOr(d, "Hostname", "(senza hostname)"),
+			mapGet(d, "Vendor", "?"), mapGet(d, "Site", "central")))
+	}
+	if len(a.Devices) > maxDevices {
+		lines = append(lines, fmt.Sprintf("... e altri %d dispositivi (troncato).", len(a.Devices)-maxDevices))
+	}
+
+	if len(a.MacStats) > 0 {
+		lines = append(lines, fmt.Sprintf(
+			"\nMAC history: %s avvistamenti, %s MAC unici, %s switch coinvolti, retention=%sgg",
+			mapGet(a.MacStats, "sightings", "0"), mapGet(a.MacStats, "unique_macs", "0"),
+			mapGet(a.MacStats, "switches", "0"), mapGet(a.MacStats, "retention_days", "?")))
+	}
+
+	if len(a.MacRecent) > 0 {
+		lines = append(lines, fmt.Sprintf("\nUltimi avvistamenti MAC (max %d):", maxRecent))
+		recent := a.MacRecent
+		if len(recent) > maxRecent {
+			recent = recent[:maxRecent]
+		}
+		for _, s := range recent {
+			lines = append(lines, fmt.Sprintf(
+				"- %s su switch %s if=%s vlan=%s last_seen=%s",
+				mapGet(s, "mac", "?"), mapGet(s, "switch_ip", "?"),
+				mapGet(s, "interface", "?"), mapGet(s, "vlan", "?"), mapGet(s, "last_seen", "?")))
+		}
+	}
+
+	if a.ScanSummary != "" {
+		lines = append(lines, fmt.Sprintf("\nUltima scansione di rete: %s", a.ScanSummary))
+	}
+
+	return strings.Join(lines, "\n")
 }
