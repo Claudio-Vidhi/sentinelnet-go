@@ -137,3 +137,30 @@ func TestAnalyzeDeviceDispatchesWLC(t *testing.T) {
 		t.Errorf("platform = %v", res["platform"])
 	}
 }
+
+// DIVERGENZA §11: un Catalyst 9800 (vendor cisco_9800, contenuto IOS-XE) viene
+// instradato all'analizzatore WLC — mostra la tabella WLAN e conserva l'analisi
+// IOS completa sotto ios_base. Nel Python cisco_9800 sarebbe 'ios'.
+func TestAnalyzeDeviceDispatchesC9800(t *testing.T) {
+	dir := t.TempDir()
+	writeBackup(t, dir, "10.0.0.10", "hostname C9800-EDGE\nwlan Corp 1 Corp-SSID\n security wpa wpa2\n no shutdown\ninterface Vlan10\n ip address 10.0.10.1 255.255.255.0\n")
+
+	res := resultMap(t, AnalyzeDevice(dir, "10.0.0.10", "cisco_9800", "Sede A", ""))
+
+	if res["config_type"] != "wlc-aireos" {
+		t.Errorf("config_type = %v, atteso wlc-aireos (routing cisco_9800)", res["config_type"])
+	}
+	if res["platform"] != "iosxe" {
+		t.Errorf("platform = %v, atteso iosxe", res["platform"])
+	}
+	wlans, _ := res["wlans"].([]any)
+	if len(wlans) != 1 {
+		t.Fatalf("wlans = %v, attesa 1 (la tabella WLAN del 9800)", res["wlans"])
+	}
+	if res["ios_base"] == nil {
+		t.Error("ios_base assente: l'analisi IOS completa deve essere conservata")
+	}
+	if res["hostname"] != "C9800-EDGE" {
+		t.Errorf("hostname = %v", res["hostname"])
+	}
+}

@@ -201,7 +201,28 @@ Catalyst 9800 (blocchi `wlan <profile> <id> <ssid>`, con `ios_base` allegato).
 Output verificato byte-per-byte contro l'output vero del Python su fixture per
 entrambe le piattaforme (`testdata/wlc_aireos.*`, `testdata/wlc_iosxe.*`).
 
-**Nota routing**: un C9800 raggiunge questo analizzatore solo se il tipo
-rilevato è `wlc-aireos` — cioè vendor `cisco_wlc` o contenuto AireOS. Un C9800
-in inventario come `cisco_9800` è rilevato come `ios` (fedele al Python) e resta
-analizzato come IOS: la vista mostrerebbe i campi IOS, non la tabella WLAN.
+**Nota routing**: vedi §11 per l'instradamento di `cisco_9800`.
+
+## 11. Config analyzer: `cisco_9800` instradato all'analizzatore WLC
+
+**Python** (`ai/config_analyzer.py`, `detect_config_type`): un vendor noto ma
+non firewall/WLC — incluso `cisco_9800` — è rilevato come `ios`. Il ramo IOS-XE
+di `analyze_wlc_config` esiste ma viene raggiunto solo da un device `cisco_wlc`
+il cui contenuto è in realtà IOS-XE, oppure per sniffing del contenuto.
+
+**Go** (`internal/fwanalyzer/detect.go`): `cisco_9800` è aggiunto al set dei
+vendor WLC, quindi `DetectConfigType` ritorna `wlc-aireos` e il Catalyst 9800
+passa da `AnalyzeWLCConfig`. `AnalyzeWLCConfig` distingue la piattaforma dal
+contenuto (nessuna riga `config ...` ⇒ ramo IOS-XE), così un 9800 mostra la
+tabella WLAN/SSID **e** conserva l'analisi IOS completa sotto `ios_base`.
+
+**Motivo**: scelta esplicita dell'utente — "l'ultimo WLC Cisco è il C9800, deve
+esserci compatibilità anche per quello". Instradarlo all'analizzatore WLC è
+l'unico modo perché un 9800 etichettato normalmente in inventario mostri la
+parte wireless invece dei soli campi IOS.
+
+**Perimetro**: solo il vendor esatto `cisco_9800`. Il `cisco` generico resta
+`ios` — mapparlo a WLC etichetterebbe come controller ogni switch Cisco.
+
+**Effetto**: nessuna perdita di informazione (l'analisi IOS resta sotto
+`ios_base`); `config_type` di un 9800 diventa `wlc-aireos` invece di `ios`.

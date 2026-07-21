@@ -2,7 +2,8 @@ package fwanalyzer
 
 import "testing"
 
-// I casi attesi sono verificati contro detect_config_type del Python.
+// I casi attesi sono verificati contro detect_config_type del Python, con
+// l'unica eccezione dichiarata di cisco_9800 (vedi DIVERGENZE §11).
 func TestDetectConfigType(t *testing.T) {
 	cases := []struct {
 		content, vendor, want string
@@ -20,7 +21,9 @@ func TestDetectConfigType(t *testing.T) {
 		{"anything", "fortinet", TypeFortiOS},
 		{"anything", "palo_alto", TypePanOS},
 		{"anything", "cisco_wlc", TypeWLCAireOS},
-		{"anything", "cisco_9800", TypeIOS},
+		// DIVERGENZA §11: il Python instrada cisco_9800 -> ios; noi lo mandiamo
+		// all'analizzatore WLC così il Catalyst 9800 mostra la tabella WLAN.
+		{"anything", "cisco_9800", TypeWLCAireOS},
 		// Vendor noto non-firewall forza ios anche su contenuto FortiOS.
 		{"#config-version=FGT", "cisco", TypeIOS},
 	}

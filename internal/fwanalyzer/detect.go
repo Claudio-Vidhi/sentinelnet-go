@@ -14,9 +14,14 @@ const (
 )
 
 var (
-	fortiosVendors   = map[string]bool{"fortinet": true, "fortigate": true, "fortios": true}
-	wlcAireosVendors = map[string]bool{"cisco_wlc": true}
-	panosVendors     = map[string]bool{
+	fortiosVendors = map[string]bool{"fortinet": true, "fortigate": true, "fortios": true}
+	// cisco_wlc = AireOS; cisco_9800 = Catalyst 9800 (IOS-XE). Entrambi vanno
+	// all'analizzatore WLC: AnalyzeWLCConfig distingue la piattaforma dal
+	// contenuto. Instradare cisco_9800 qui è una DIVERGENZA voluta dal Python
+	// (dove cisco_9800 -> ios) — vedi DIVERGENZE §11. NB: solo cisco_9800, non
+	// il 'cisco' generico, che etichetterebbe come WLC ogni switch Cisco.
+	wlcVendors   = map[string]bool{"cisco_wlc": true, "cisco_9800": true}
+	panosVendors = map[string]bool{
 		"palo_alto": true, "paloalto": true, "panos": true, "pan-os": true, "palo alto": true,
 	}
 
@@ -40,7 +45,7 @@ func DetectConfigType(content, vendor string) string {
 		switch {
 		case fortiosVendors[v]:
 			return TypeFortiOS
-		case wlcAireosVendors[v]:
+		case wlcVendors[v]:
 			return TypeWLCAireOS
 		case panosVendors[v]:
 			return TypePanOS
