@@ -1,0 +1,815 @@
+{
+  "tools": [
+    {
+      "description": "List all managed network devices (IP, hostname, vendor, group/site, status) from the SentinelNet inventory.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "list_devices"
+    },
+    {
+      "description": "Get the discovered network topology: nodes (devices with type, vendor, VTP info) and links (local/remote ports, Port-Channel/LAG membership with per-side aggregate ids).",
+      "inputSchema": {
+        "properties": {
+          "group": {
+            "description": "Site/group filter, 'all' for everything",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_network_map"
+    },
+    {
+      "description": "List all EtherChannel/Port-Channel aggregates detected in the network with their member interfaces per device.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "get_port_channels"
+    },
+    {
+      "description": "Locate a MAC address in the network: returns the access switch/port where the host is attached (uplink/trunk sightings filtered out).",
+      "inputSchema": {
+        "properties": {
+          "mac": {
+            "description": "MAC address, any format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mac"
+        ],
+        "type": "object"
+      },
+      "name": "locate_mac"
+    },
+    {
+      "description": "Search the historical MAC address table across all switches. All filters optional.",
+      "inputSchema": {
+        "properties": {
+          "interface": {
+            "type": "string"
+          },
+          "mac": {
+            "type": "string"
+          },
+          "switch": {
+            "description": "Switch IP",
+            "type": "string"
+          },
+          "vlan": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "search_mac"
+    },
+    {
+      "description": "Resolve MAC <-> IP bindings for network clients, collected from the ARP tables of the L3 gateways (L3 switches or firewalls, whichever routes the VLAN). Search by MAC (full or fragment) or IP prefix.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "description": "IP address or prefix",
+            "type": "string"
+          },
+          "mac": {
+            "description": "MAC address or fragment",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "mac_to_ip"
+    },
+    {
+      "description": "Unified client view: MAC + current IP (from the routing gateway's ARP) + access switch/port (from the MAC table). Answers 'who is 10.0.0.5 and which port is it attached to'.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          },
+          "mac": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "client_map"
+    },
+    {
+      "description": "Collect the ARP tables from managed L3 devices (switches and firewalls) and store MAC<->IP bindings in the historical DB. Requires operator role; optionally restrict to one device IP or a site/group.",
+      "inputSchema": {
+        "properties": {
+          "group": {
+            "description": "Site/group filter, 'all' default",
+            "type": "string"
+          },
+          "ip": {
+            "description": "Only this device (optional)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "arp_scan"
+    },
+    {
+      "description": "Analyze the stored configuration backup of a device: VLANs, SVIs, routing, trunk/access ports, neighbors, security findings.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "description": "Device IP",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "analyze_config"
+    },
+    {
+      "description": "Get the status of the last triage run (reachability, backup, version detection) for every device.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "get_triage_status"
+    },
+    {
+      "description": "Run a single CLI command on a managed device via SSH and return the output. Destructive commands are blocked server-side; requires an account with operator role.",
+      "inputSchema": {
+        "properties": {
+          "command": {
+            "description": "CLI command, e.g. 'show vlan brief'",
+            "type": "string"
+          },
+          "ip": {
+            "description": "Device IP",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "command"
+        ],
+        "type": "object"
+      },
+      "name": "send_cli_command"
+    },
+    {
+      "description": "List the configured sites (central + remote) with mode (central-poll/agent), subnets and last-seen time.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "list_sites"
+    },
+    {
+      "description": "Get live system status of a FortiGate firewall (version, HA, uptime, hostname) via REST API or SSH fallback.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "description": "FortiGate IP (must be in inventory)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_status"
+    },
+    {
+      "description": "Get live interface state of a FortiGate: IPs, link status, speed, counters, VLANs, aggregates.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_interfaces"
+    },
+    {
+      "description": "Get the live ARP table of a FortiGate (IP <-> MAC on each interface).",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_arp"
+    },
+    {
+      "description": "Get active DHCP leases from a FortiGate (client IP, MAC, hostname, expiry, interface).",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_dhcp_leases"
+    },
+    {
+      "description": "Get the FortiOS device-identification inventory: every client the FortiGate has detected with MAC, IP, hostname, OS, ingress interface, online/offline state.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_device_inventory"
+    },
+    {
+      "description": "Get the configured firewall policies of a FortiGate (full policy table: src/dst interfaces and addresses, services, action, NAT, UTM profiles, logging).",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_policies"
+    },
+    {
+      "description": "Get the firewall address book of a FortiGate (name, type, subnet/FQDN, comment) — slim cmdb read, useful to resolve object names used in policies.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_firewall_addresses"
+    },
+    {
+      "description": "Get the firewall policy table of a FortiGate with only the fields relevant to observability (policyid, name, src/dst interfaces and addresses, service, action, status, logtraffic). Slimmer than fortigate_policies.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_firewall_policy_objects"
+    },
+    {
+      "description": "Get the custom firewall services of a FortiGate (name, TCP/UDP port ranges, comment).",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_firewall_services"
+    },
+    {
+      "description": "Ask the FortiGate which firewall policy WOULD match a given flow (source IP, destination IP/FQDN, protocol, port) without generating traffic. Key tool for 'why can't client X reach site Y'.",
+      "inputSchema": {
+        "properties": {
+          "dest": {
+            "description": "Destination IP or FQDN",
+            "type": "string"
+          },
+          "dest_port": {
+            "description": "Default 443",
+            "type": "integer"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "protocol": {
+            "description": "TCP | UDP | ICMP (default TCP)",
+            "type": "string"
+          },
+          "src_ip": {
+            "description": "Client source IP",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "src_ip",
+          "dest"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_policy_lookup"
+    },
+    {
+      "description": "Get active sessions on a FortiGate, filterable by source IP, destination IP and destination port.",
+      "inputSchema": {
+        "properties": {
+          "count": {
+            "description": "Max sessions (default 100)",
+            "type": "integer"
+          },
+          "dst_ip": {
+            "type": "string"
+          },
+          "dst_port": {
+            "type": "integer"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "src_ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_sessions"
+    },
+    {
+      "description": "Get the live IPv4 routing table of a FortiGate.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_routes"
+    },
+    {
+      "description": "Query FortiGate forward traffic logs (what the firewall logged for a client/destination: allowed, denied, UTM verdicts). Filters optional.",
+      "inputSchema": {
+        "properties": {
+          "action": {
+            "description": "accept | deny | ...",
+            "type": "string"
+          },
+          "count": {
+            "description": "Max rows (default 100)",
+            "type": "integer"
+          },
+          "dst_ip": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "src_ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_traffic_logs"
+    },
+    {
+      "description": "List WiFi clients connected to FortiAPs managed by a FortiGate, with signal strength (RSSI/SNR), AP, SSID, data rates. Use for wireless disconnection troubleshooting.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_wifi_clients"
+    },
+    {
+      "description": "List FortiAPs managed by a FortiGate: status, channel utilization, connected clients, firmware.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_managed_aps"
+    },
+    {
+      "description": "Get the complete live configuration of a FortiGate (full backup text). Large output; requires operator role.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_full_config"
+    },
+    {
+      "description": "One-shot diagnosis of a client (IP or MAC) through a FortiGate: device inventory, ARP, DHCP lease, active sessions, matching firewall policy toward an optional destination, recent traffic logs, WiFi state. Answers 'why can't this client reach X' / 'why does this client disconnect'.",
+      "inputSchema": {
+        "properties": {
+          "client": {
+            "description": "Client IP or MAC address",
+            "type": "string"
+          },
+          "dest": {
+            "description": "Optional destination IP/FQDN for policy lookup",
+            "type": "string"
+          },
+          "dest_port": {
+            "description": "Default 443",
+            "type": "integer"
+          },
+          "ip": {
+            "description": "FortiGate IP",
+            "type": "string"
+          },
+          "protocol": {
+            "description": "TCP | UDP | ICMP (default TCP)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "client"
+        ],
+        "type": "object"
+      },
+      "name": "fortigate_diagnose_client"
+    },
+    {
+      "description": "Get status of a Cisco wireless LAN controller (AireOS or Catalyst 9800): version, uptime, AP/client counts.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "description": "WLC IP (must be in inventory)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "wlc_status"
+    },
+    {
+      "description": "List access points joined to a Cisco WLC: name, model, IP, clients, location, state.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "wlc_ap_summary"
+    },
+    {
+      "description": "List wireless clients on a Cisco WLC with AP, WLAN/SSID, state and protocol.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "wlc_client_summary"
+    },
+    {
+      "description": "Full detail for one wireless client by MAC: AP, SSID, RSSI/SNR, data rates, roaming/session history, policy state. Use for disconnection troubleshooting.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          },
+          "mac": {
+            "description": "Client MAC, any format",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "mac"
+        ],
+        "type": "object"
+      },
+      "name": "wlc_client_detail"
+    },
+    {
+      "description": "List WLANs/SSIDs configured on a Cisco WLC with status and security policy.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "wlc_wlan_summary"
+    },
+    {
+      "description": "List rogue/interfering access points detected by a Cisco WLC (possible cause of client disconnections).",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "wlc_rogue_aps"
+    },
+    {
+      "description": "One-shot wireless diagnosis of a client (MAC) on a Cisco WLC: client detail (RSSI/SNR/AP/SSID), AP summary, WLAN summary and nearby rogue APs. Answers 'why do clients on this AP disconnect'.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "description": "WLC IP",
+            "type": "string"
+          },
+          "mac": {
+            "description": "Client MAC address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "mac"
+        ],
+        "type": "object"
+      },
+      "name": "wlc_diagnose_client"
+    },
+    {
+      "description": "Generate a hardened day-0 FortiOS configuration for a new FortiGate (zero-touch provisioning; does not touch any device). Same parameters as the FortiGate ZTP wizard.",
+      "inputSchema": {
+        "properties": {
+          "admin_password": {
+            "type": "string"
+          },
+          "admin_user": {
+            "type": "string"
+          },
+          "banner": {
+            "type": "string"
+          },
+          "dhcp_end": {
+            "type": "string"
+          },
+          "dhcp_server": {
+            "type": "boolean"
+          },
+          "dhcp_start": {
+            "type": "string"
+          },
+          "disable_wan_admin": {
+            "type": "boolean"
+          },
+          "dns_primary": {
+            "type": "string"
+          },
+          "dns_secondary": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "lan_interface": {
+            "type": "string"
+          },
+          "lan_ip": {
+            "type": "string"
+          },
+          "lan_mask": {
+            "type": "string"
+          },
+          "lan_to_wan_policy": {
+            "type": "boolean"
+          },
+          "mgmt_interface": {
+            "type": "string"
+          },
+          "mgmt_ip": {
+            "type": "string"
+          },
+          "mgmt_mask": {
+            "type": "string"
+          },
+          "ntp_servers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "syslog_server": {
+            "type": "string"
+          },
+          "wan_gw": {
+            "type": "string"
+          },
+          "wan_interface": {
+            "type": "string"
+          },
+          "wan_ip": {
+            "type": "string"
+          },
+          "wan_mask": {
+            "type": "string"
+          },
+          "wan_mode": {
+            "description": "dhcp | static",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hostname"
+        ],
+        "type": "object"
+      },
+      "name": "generate_fortigate_config"
+    },
+    {
+      "description": "Generate a hardened day-0 Cisco IOS/IOS-XE configuration for a new switch (does not touch any device). Accepts the same parameters as the 'Zero-Touch Switch' wizard.",
+      "inputSchema": {
+        "properties": {
+          "access_ports": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "access_vlan": {
+            "type": "integer"
+          },
+          "admin_password": {
+            "type": "string"
+          },
+          "admin_user": {
+            "type": "string"
+          },
+          "dhcp_snooping": {
+            "type": "boolean"
+          },
+          "enable_secret": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "mgmt_gw": {
+            "type": "string"
+          },
+          "mgmt_ip": {
+            "type": "string"
+          },
+          "mgmt_mask": {
+            "type": "string"
+          },
+          "mgmt_vlan": {
+            "type": "integer"
+          },
+          "ntp_servers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "port_security": {
+            "type": "boolean"
+          },
+          "role": {
+            "description": "access | distribution",
+            "type": "string"
+          },
+          "syslog_server": {
+            "type": "string"
+          },
+          "trunk_allowed_vlans": {
+            "type": "string"
+          },
+          "trunk_ports": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "vlans": {
+            "description": "[{id, name}, ...]",
+            "items": {
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hostname"
+        ],
+        "type": "object"
+      },
+      "name": "generate_switch_config"
+    },
+    {
+      "description": "Get the top bandwidth consumers (aggregated flow records) for a time window. Read-only, tenant-scoped, summarized (top-N only).",
+      "inputSchema": {
+        "properties": {
+          "limit": {
+            "description": "Max flows (default 20, max 100)",
+            "type": "integer"
+          },
+          "metric": {
+            "description": "'bytes' (default) or 'packets'",
+            "type": "string"
+          },
+          "window": {
+            "description": "Time window, e.g. 15m, 24h (max 7d)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_top_talkers"
+    },
+    {
+      "description": "Get correlated security anomalies (blocked traffic matched with flow evidence and switch port). Read-only, tenant-scoped.",
+      "inputSchema": {
+        "properties": {
+          "status": {
+            "description": "'new' (default), 'ack', 'resolved', 'all'",
+            "type": "string"
+          },
+          "window": {
+            "description": "Time window, e.g. 24h (max 7d)",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "get_anomalies"
+    }
+  ]
+}

@@ -1,0 +1,293 @@
+{
+  "analyze_config": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/config-analyzer/10.0.0.1"
+  },
+  "arp_scan": {
+    "body": {
+      "group": "all",
+      "ip": "10.0.0.1"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/arp/scan"
+  },
+  "client_map": {
+    "body": null,
+    "method": "GET",
+    "params": {
+      "ip": "10.0.0.1",
+      "mac": "aa:bb:cc:dd:ee:ff"
+    },
+    "path": "/api/arp/client-map"
+  },
+  "fortigate_arp": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/arp"
+  },
+  "fortigate_device_inventory": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/device-inventory"
+  },
+  "fortigate_dhcp_leases": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/dhcp-leases"
+  },
+  "fortigate_diagnose_client": {
+    "body": {
+      "dest": "8.8.8.8",
+      "dest_port": 443,
+      "protocol": "TCP"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/diagnose-client"
+  },
+  "fortigate_firewall_addresses": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/firewall/addresses"
+  },
+  "fortigate_firewall_policy_objects": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/firewall/policy-objects"
+  },
+  "fortigate_firewall_services": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/firewall/services"
+  },
+  "fortigate_full_config": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/full-config"
+  },
+  "fortigate_interfaces": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/interfaces"
+  },
+  "fortigate_managed_aps": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/wifi/aps"
+  },
+  "fortigate_policies": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/policies"
+  },
+  "fortigate_policy_lookup": {
+    "body": {
+      "dest": "8.8.8.8",
+      "dest_port": 443,
+      "protocol": "TCP",
+      "src_ip": "10.0.0.5"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/policy-lookup"
+  },
+  "fortigate_routes": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/routes"
+  },
+  "fortigate_sessions": {
+    "body": {
+      "count": 100,
+      "dst_ip": "8.8.8.8",
+      "src_ip": "10.0.0.5"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/sessions"
+  },
+  "fortigate_status": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/status"
+  },
+  "fortigate_traffic_logs": {
+    "body": {
+      "action": "accept",
+      "count": 100,
+      "dst_ip": "8.8.8.8",
+      "src_ip": "10.0.0.5"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/logs"
+  },
+  "fortigate_wifi_clients": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/fortigate/10.0.0.1/wifi/clients"
+  },
+  "generate_fortigate_config": {
+    "body": {
+      "hostname": "H1"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/provisioner/fgt/generate"
+  },
+  "generate_switch_config": {
+    "body": {
+      "hostname": "H1"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/provisioner/generate"
+  },
+  "get_anomalies": {
+    "body": null,
+    "method": "GET",
+    "params": {
+      "limit": "50",
+      "status": "new",
+      "window": "15m"
+    },
+    "path": "/api/observability/anomalies"
+  },
+  "get_network_map": {
+    "body": null,
+    "method": "GET",
+    "params": {
+      "group": "all"
+    },
+    "path": "/api/network-map"
+  },
+  "get_port_channels": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/portchannels"
+  },
+  "get_top_talkers": {
+    "body": null,
+    "method": "GET",
+    "params": {
+      "limit": "20",
+      "metric": "bytes",
+      "window": "15m"
+    },
+    "path": "/api/observability/top"
+  },
+  "get_triage_status": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/triage-status"
+  },
+  "list_devices": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/local-devices"
+  },
+  "list_sites": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/sites"
+  },
+  "locate_mac": {
+    "body": null,
+    "method": "GET",
+    "params": {
+      "mac": "aa:bb:cc:dd:ee:ff"
+    },
+    "path": "/api/mac/locate"
+  },
+  "mac_to_ip": {
+    "body": null,
+    "method": "GET",
+    "params": {
+      "ip": "10.0.0.1",
+      "mac": "aa:bb:cc:dd:ee:ff"
+    },
+    "path": "/api/arp/search"
+  },
+  "search_mac": {
+    "body": null,
+    "method": "GET",
+    "params": {
+      "interface": "Gi0/1",
+      "mac": "aa:bb:cc:dd:ee:ff",
+      "switch": "10.0.0.2",
+      "vlan": "10"
+    },
+    "path": "/api/mac/search"
+  },
+  "send_cli_command": {
+    "body": {
+      "command": "show version",
+      "ip": "10.0.0.1"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/send-command"
+  },
+  "wlc_ap_summary": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/wlc/10.0.0.1/ap-summary"
+  },
+  "wlc_client_detail": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/wlc/10.0.0.1/client/aa:bb:cc:dd:ee:ff"
+  },
+  "wlc_client_summary": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/wlc/10.0.0.1/client-summary"
+  },
+  "wlc_diagnose_client": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/wlc/10.0.0.1/diagnose-client/aa:bb:cc:dd:ee:ff"
+  },
+  "wlc_rogue_aps": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/wlc/10.0.0.1/rogue-aps"
+  },
+  "wlc_status": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/wlc/10.0.0.1/status"
+  },
+  "wlc_wlan_summary": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/wlc/10.0.0.1/wlan-summary"
+  }
+}
