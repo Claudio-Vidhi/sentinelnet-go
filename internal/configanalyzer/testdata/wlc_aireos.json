@@ -1,0 +1,78 @@
+{
+  "dynamic_interfaces": [
+    {
+      "ip": "10.0.10.5/24",
+      "name": "mgmt",
+      "vlan": "10"
+    },
+    {
+      "ip": "10.0.20.5/24",
+      "name": "guest",
+      "vlan": "20"
+    }
+  ],
+  "hostname": "WLC-HQ",
+  "mobility_group": "HQ-MOBILITY",
+  "platform": "aireos",
+  "radius_servers": [
+    {
+      "index": "1",
+      "ip": "192.168.1.10",
+      "kind": "auth",
+      "port": "1812"
+    },
+    {
+      "index": "1",
+      "ip": "192.168.1.10",
+      "kind": "acct",
+      "port": "1813"
+    }
+  ],
+  "validation": {
+    "broadcast_ssid_off": [
+      "2 (Guest)"
+    ],
+    "disabled_wlans": [
+      "3 (Legacy-SSID)"
+    ],
+    "legacy_tkip_wlans": [
+      "3 (Legacy-SSID)"
+    ],
+    "management_http": true,
+    "open_wlans": [
+      "2 (Guest)"
+    ]
+  },
+  "wlans": [
+    {
+      "broadcast_ssid": true,
+      "enabled": true,
+      "id": "1",
+      "interface": "mgmt",
+      "profile": "Corp",
+      "security": "WPA2",
+      "ssid": "Corp-SSID",
+      "tkip": false
+    },
+    {
+      "broadcast_ssid": false,
+      "enabled": true,
+      "id": "2",
+      "interface": "",
+      "profile": "Guest",
+      "security": "open",
+      "ssid": "Guest",
+      "tkip": false
+    },
+    {
+      "broadcast_ssid": true,
+      "enabled": false,
+      "id": "3",
+      "interface": "",
+      "profile": "Legacy",
+      "security": "WPA",
+      "ssid": "Legacy-SSID",
+      "tkip": true
+    }
+  ]
+}

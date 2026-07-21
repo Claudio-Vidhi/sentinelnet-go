@@ -1,0 +1,25 @@
+hostname C9800-CL
+!
+vlan 10
+ name USERS
+!
+wlan Corp-Profile 1 Corp-SSID
+ security wpa wpa2
+ no shutdown
+!
+wlan Guest-Profile 2 Guest-SSID
+ no security wpa
+ no broadcast-ssid
+!
+wlan Legacy-Profile 3 Legacy-SSID
+ security wpa wpa1
+ shutdown
+!
+wlan Secure-Profile 4 Secure-SSID
+ security dot1x
+ security wpa wpa3
+ no shutdown
+!
+interface Vlan10
+ ip address 10.0.10.1 255.255.255.0
+!

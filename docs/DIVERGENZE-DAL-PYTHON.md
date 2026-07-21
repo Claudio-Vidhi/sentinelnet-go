@@ -191,24 +191,17 @@ funzione — non prima.
 
 ---
 
-## 10. Config analyzer: WLC AireOS analizzato come IOS (temporaneo)
+## 10. Config analyzer: WLC AireOS analizzato come IOS (RISOLTA)
 
-**Python** (`ai/config_analyzer.py`, `analyze_device`): per un backup rilevato
-come `wlc-aireos` usa `analyze_wlc_config`, un analizzatore strutturato dedicato
-(SSID/WLAN, interfacce, RF, ecc.).
+**Risolta**: `analyze_wlc_config` è ora portato in
+`internal/configanalyzer/wlc.go` (`AnalyzeWLCConfig`) e il dispatch di
+`backup.go` instrada `wlc-aireos` all'analizzatore dedicato. Copre entrambe le
+piattaforme come il Python: AireOS (`show run-config commands`) e IOS-XE del
+Catalyst 9800 (blocchi `wlan <profile> <id> <ssid>`, con `ios_base` allegato).
+Output verificato byte-per-byte contro l'output vero del Python su fixture per
+entrambe le piattaforme (`testdata/wlc_aireos.*`, `testdata/wlc_iosxe.*`).
 
-**Go** (`internal/configanalyzer/backup.go`): il dispatch gestisce `ios`,
-`fortios` e `panos`. Un backup `wlc-aireos` ricade nel ramo IOS e viene
-analizzato con `AnalyzeConfig`, esattamente come prima che il dispatch
-esistesse.
-
-**Motivo**: `analyze_wlc_config` (~160 righe) è un porting a sé, rinviato per
-tenere piccolo l'intervento sul dispatch. Non è una regressione — è il
-comportamento già in essere nel port Go — ma è una divergenza dichiarata
-finché l'analizzatore AireOS non viene portato.
-
-**Effetto**: la vista config-analyzer di un controller AireOS mostra i campi
-IOS (spesso vuoti o parziali) invece di quelli wireless. `config_type` è
-comunque riportato correttamente come `wlc-aireos`.
-
-**Stato**: da completare insieme al resto del dominio D (converter e MCP/AI).
+**Nota routing**: un C9800 raggiunge questo analizzatore solo se il tipo
+rilevato è `wlc-aireos` — cioè vendor `cisco_wlc` o contenuto AireOS. Un C9800
+in inventario come `cisco_9800` è rilevato come `ios` (fedele al Python) e resta
+analizzato come IOS: la vista mostrerebbe i campi IOS, non la tabella WLAN.

@@ -112,9 +112,16 @@ func AnalyzeDevice(backupDir, ip, vendor, invGroup, invHostname string) any {
 		}
 		isFirewall = true
 		firewall = fwanalyzer.AnalyzePanos(content)
+	case fwanalyzer.TypeWLCAireOS:
+		// Cisco WLC: AireOS o IOS-XE/Catalyst 9800 (gestiti entrambi da
+		// AnalyzeWLCConfig). Non è un firewall: is_firewall resta false,
+		// firewall null, e niente vtp (solo IOS).
+		wa := AnalyzeWLCConfig(content)
+		hostname = wa.Hostname
+		result = structToMap(wa)
+		delete(result, "hostname") // reinserito nel meta comune
 	default:
-		// IOS (e wlc-aireos, non ancora portato: analizzato come IOS, come
-		// prima di questo dispatch — vedi DIVERGENZE §10).
+		// IOS.
 		result = structToMap(AnalyzeConfig(content))
 		hostname = HostnameFromConfig(content)
 		result["vtp"] = ParseVTPStatus(content)

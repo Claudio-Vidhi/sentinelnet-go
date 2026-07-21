@@ -1,0 +1,22 @@
+config sysname WLC-HQ
+config interface create mgmt 10
+config interface address dynamic-interface mgmt 10.0.10.5 255.255.255.0 10.0.10.1
+config interface vlan mgmt 10
+config interface create guest 20
+config interface address guest 10.0.20.5 255.255.255.0
+config wlan create 1 Corp Corp-SSID
+config wlan interface 1 mgmt
+config wlan security wpa wpa2 enable 1
+config wlan enable 1
+config wlan create 2 Guest
+config wlan security wpa disable 2
+config wlan broadcast-ssid disable 2
+config wlan enable 2
+config wlan create 3 Legacy Legacy-SSID
+config wlan security wpa wpa1 enable 3
+config wlan security ciphers tkip enable 3
+config wlan disable 3
+config radius auth add 1 192.168.1.10 1812 ascii secret
+config radius acct add 1 192.168.1.10 1813 ascii secret
+config mobility group domain HQ-MOBILITY
+config network webmode enable

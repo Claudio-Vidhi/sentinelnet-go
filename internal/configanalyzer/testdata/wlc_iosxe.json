@@ -1,0 +1,109 @@
+{
+  "dynamic_interfaces": [],
+  "hostname": "C9800-CL",
+  "ios_base": {
+    "acls": [],
+    "interfaces": [
+      {
+        "access_vlan": "",
+        "acl_in": "",
+        "acl_out": "",
+        "channel_group": "",
+        "description": "",
+        "ip": "10.0.10.1/24",
+        "mode": "svi",
+        "name": "Vlan10",
+        "raw": "interface Vlan10\n ip address 10.0.10.1 255.255.255.0",
+        "shutdown": false,
+        "trunk_allowed": "",
+        "trunk_native": "",
+        "voice_vlan": ""
+      }
+    ],
+    "routing": {
+      "protocols": [],
+      "static": [],
+      "vrfs": []
+    },
+    "validation": {
+      "missing_acls": [],
+      "route_acl_refs": [],
+      "undefined_vlans": [],
+      "unused_acls": [],
+      "unused_vlans": []
+    },
+    "vlans": [
+      {
+        "access_ifaces": [],
+        "id": "10",
+        "name": "USERS",
+        "svi": {
+          "ip": "10.0.10.1/24",
+          "shutdown": false
+        },
+        "trunk_ifaces": []
+      }
+    ],
+    "vpn": []
+  },
+  "mobility_group": "",
+  "platform": "iosxe",
+  "radius_servers": [],
+  "validation": {
+    "broadcast_ssid_off": [
+      "2 (Guest-SSID)"
+    ],
+    "disabled_wlans": [
+      "3 (Legacy-SSID)"
+    ],
+    "legacy_tkip_wlans": [
+      "3 (Legacy-SSID)"
+    ],
+    "management_http": false,
+    "open_wlans": [
+      "2 (Guest-SSID)"
+    ]
+  },
+  "wlans": [
+    {
+      "broadcast_ssid": true,
+      "enabled": true,
+      "id": "1",
+      "interface": "",
+      "profile": "Corp-Profile",
+      "security": "WPA2",
+      "ssid": "Corp-SSID",
+      "tkip": false
+    },
+    {
+      "broadcast_ssid": false,
+      "enabled": true,
+      "id": "2",
+      "interface": "",
+      "profile": "Guest-Profile",
+      "security": "open",
+      "ssid": "Guest-SSID",
+      "tkip": false
+    },
+    {
+      "broadcast_ssid": true,
+      "enabled": false,
+      "id": "3",
+      "interface": "",
+      "profile": "Legacy-Profile",
+      "security": "WPA",
+      "ssid": "Legacy-SSID",
+      "tkip": false
+    },
+    {
+      "broadcast_ssid": true,
+      "enabled": true,
+      "id": "4",
+      "interface": "",
+      "profile": "Secure-Profile",
+      "security": "WPA3",
+      "ssid": "Secure-SSID",
+      "tkip": false
+    }
+  ]
+}
