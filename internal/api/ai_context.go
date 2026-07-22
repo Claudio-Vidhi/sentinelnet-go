@@ -135,26 +135,36 @@ func (a *App) fortigateLiveContext(w http.ResponseWriter, r *http.Request, ip st
 		lines = append(lines, fmt.Sprintf("Configurazione live non disponibile: %v", err))
 	} else {
 		text := configText(cfg.Data)
-		if len(text) > 120000 {
-			text = text[:120000] + "\n... [config troncata]"
+		if r := []rune(text); len(r) > 120000 {
+			text = string(r[:120000]) + "\n... [config troncata]"
 		}
 		lines = append(lines, fmt.Sprintf("Configurazione completa (fonte %s):\n%s", cfg.Source, text))
 	}
 	return strings.Join(lines, "\n\n"), true
 }
 
-// tenantContextBlock: contesto completo di un tenant/sede (dispositivi, gruppo,
-// sedi VPN, MAC history) scoped e verificato. Porta di _tenant_context_block.
-func (a *App) tenantContextBlock(w http.ResponseWriter, r *http.Request, tenant string) (string, bool) {
+// assertGroupAllowed verifica prima lo scope (403 se il tenant è fuori dallo
+// scope dell'utente, come Python assert_group_allowed) e poi l'esistenza (404).
+// Ritorna false dopo aver scritto la risposta d'errore.
+func (a *App) assertGroupAllowed(w http.ResponseWriter, r *http.Request, tenant string) bool {
 	claims := claimsFrom(r.Context())
-	exists, _ := a.store.TenantExists(tenant)
-	if !exists {
-		writeErr(w, http.StatusNotFound, "Sede/tenant '"+tenant+"' non trovata.")
-		return "", false
-	}
 	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
 	if !canSeeTenant(scoped, tenant) {
 		writeErr(w, http.StatusForbidden, "tenant non consentito")
+		return false
+	}
+	exists, _ := a.store.TenantExists(tenant)
+	if !exists {
+		writeErr(w, http.StatusNotFound, "Sede/tenant '"+tenant+"' non trovata.")
+		return false
+	}
+	return true
+}
+
+// tenantContextBlock: contesto completo di un tenant/sede (dispositivi, gruppo,
+// sedi VPN, MAC history) scoped e verificato. Porta di _tenant_context_block.
+func (a *App) tenantContextBlock(w http.ResponseWriter, r *http.Request, tenant string) (string, bool) {
+	if !a.assertGroupAllowed(w, r, tenant) {
 		return "", false
 	}
 
@@ -267,15 +277,7 @@ var (
 // tenantCommonParameters: distilla i parametri COMUNI dell'ambiente di rete di
 // un tenant dai backup dei suoi dispositivi. Porta di _tenant_common_parameters.
 func (a *App) tenantCommonParameters(w http.ResponseWriter, r *http.Request, tenant string) (string, bool) {
-	claims := claimsFrom(r.Context())
-	exists, _ := a.store.TenantExists(tenant)
-	if !exists {
-		writeErr(w, http.StatusNotFound, "Sede/tenant '"+tenant+"' non trovata.")
-		return "", false
-	}
-	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
-	if !canSeeTenant(scoped, tenant) {
-		writeErr(w, http.StatusForbidden, "tenant non consentito")
+	if !a.assertGroupAllowed(w, r, tenant) {
 		return "", false
 	}
 

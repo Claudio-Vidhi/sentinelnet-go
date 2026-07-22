@@ -59,6 +59,32 @@ func TestTopFlowsContext(t *testing.T) {
 	if len(flows) != 0 {
 		t.Fatalf("scope leak: got %d flows, want 0", len(flows))
 	}
+
+	// NULL dst_port row: a key with DstPort == nil must match it via
+	// "dst_port IS NULL", and must NOT match a row with a non-null dst_port.
+	_, e := s.DB.Exec(`INSERT INTO flow_aggregates
+		(window_start, tenant, src_ip, dst_ip, protocol, dst_port, total_bytes, total_packets, flow_count)
+		VALUES (?,?,?,?,?,NULL,?,?,1)`, now-60, "acme", "10.0.0.4", "9.9.9.9", 1, 777, 7)
+	if e != nil {
+		t.Fatal(e)
+	}
+	flows, _, _ = s.TopFlowsContext(cutoff, []string{"acme"}, []FlowKey{
+		{SrcIP: "10.0.0.4", DstIP: "9.9.9.9", Protocol: 1, DstPort: nil},
+	}, 20)
+	if len(flows) != 1 || flows[0].SrcIP != "10.0.0.4" {
+		t.Fatalf("nil dst_port key: got %d flows, want 1 (10.0.0.4): %+v", len(flows), flows)
+	}
+	if flows[0].DstPort != nil {
+		t.Errorf("nil dst_port key: expected DstPort nil in result, got %v", *flows[0].DstPort)
+	}
+
+	// A nil-DstPort key must not match a row that has a non-null dst_port.
+	flows, _, _ = s.TopFlowsContext(cutoff, []string{"acme"}, []FlowKey{
+		{SrcIP: "10.0.0.1", DstIP: "8.8.8.8", Protocol: 6, DstPort: nil},
+	}, 20)
+	if len(flows) != 0 {
+		t.Fatalf("nil dst_port key must not match non-null dst_port row: got %d flows, want 0: %+v", len(flows), flows)
+	}
 }
 
 func TestTopFlowsContextAnomalies(t *testing.T) {
