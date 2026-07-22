@@ -238,3 +238,24 @@ parte wireless invece dei soli campi IOS.
 distribuzione a singolo artefatto statico. Comportamento del protocollo, tabella
 tool, auth e redazione sono 1:1 col Python; cambia solo `command`/`args` nella
 config di Claude Desktop/Cline. Nessun'altra divergenza.
+
+---
+
+## 13. Default del modello Anthropic per l'AI provider
+
+**Python** (`ai/ai_assistant.py`, `DEFAULT_MODELS`): il default per Anthropic
+è `claude-3-5-sonnet-latest`.
+
+**Go** (`internal/ai/models.go`, `DefaultModels`/`GetDefaultModel`): il default
+per Anthropic è `claude-sonnet-5`.
+
+**Motivo**: l'alias `claude-3-5-sonnet-latest` è datato e può non risolvere più
+in futuro, facendo fallire il primo messaggio di chat di un profilo che non ha
+impostato un modello esplicito. Il default si applica **solo** quando un profilo
+non imposta un modello — l'utente può sovrascriverlo in qualsiasi momento via UI
+o API. OpenAI (`gpt-4o-mini`), Gemini (`gemini-3-flash`), Ollama (`llama3`)
+restano verbatim dal Python.
+
+**Effetto**: una chat su Anthropic con profilo senza modello impostato usa
+`claude-sonnet-5` anziché l'alias rischiato. Quando il profilo imposta un
+modello, quello vince e non c'è divergenza.

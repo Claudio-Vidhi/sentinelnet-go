@@ -969,3 +969,41 @@ Note:
 
 **Residuo dominio D**: unità 2 (AI Assistant — rotta `/api/ai/chat`) e unità 3
 (MCP Client-preview).
+
+### 2026-07-21 — Dominio D: AI provider core (unità 2a/3 di AI Assistant)
+
+| Intervento | File |
+|---|---|
+| Package `internal/ai`: chat + 4 provider (Anthropic/OpenAI/Gemini/Ollama via HTTP grezzo), `ListModels`, budget/fit del contesto, rate limiter a finestra scorrevole, `BuildTenantContext`, choke-point di redazione I-1. | `internal/ai/{chat.go,providers.go,models.go,ratelimit.go,context.go,chat_test.go,providers_test.go}` |
+| Default modello Anthropic: `claude-sonnet-5` vs alias Python rischiato; openai/gemini/ollama verbatim. | Divergenza §13 |
+
+Note:
+
+- **Chat + 4 provider distinti**: `Chat(msgs, ChatOptions)` è il punto d'uscita; il dispatch
+  è uno `switch` verso `chatAnthropic/chatOpenAI/chatGemini/chatOllama`, ognuno col proprio
+  endpoint/header/payload. Nessun SDK di provider: solo `net/http`.
+- **ListModels**: `ListModels(provider, apiKey, baseURL)` con un lister per provider — Gemini
+  `v1beta/models` filtrato a `generateContent`, OpenAI `/models` meno gli hint non-chat
+  (ordinato), Anthropic `/v1/models`, Ollama `/api/tags`.
+- **Budget/fit del contesto**: `ContextCharBudget` dà il budget in caratteri per modello
+  (override per-profilo); `FitContext` riduce i BLOCCHI di contesto in proporzione, filtrando
+  le sezioni pertinenti alla domanda, poi troncamento testa+coda. Lunghezze/slice a code-point
+  (rune), 1:1 col Python.
+- **Rate limiter**: `pkgRateLimiter` globale a finestra scorrevole di 60s (mutex), riconfigurato
+  per chiamata via `ChatOptions.RateLimitRPM` (`*int`: nil = non toccare, `*0` = illimitato,
+  `*N` = N/min). Oltre il limite → `RateLimitError`.
+- **BuildTenantContext**: formatter markdown puro (porta di `build_tenant_context`) su dati già
+  filtrati per tenant; rende `null` come `None` (parità `str(None)`).
+- **Redazione choke-point I-1**: in `Chat`, il CONTENUTO di ogni messaggio passa per
+  `redact.Text` prima di raggiungere qualunque provider, salvo `AllowUnredacted && isLocal`
+  (ollama, o openai su host locale/RFC1918). Fail-closed; provato con test positivo+negativo
+  (il segreto trapela se si disattiva il gate).
+- **Goldens**: `budget/fit_context/tenant_context.json` dal Python, incl. casi Unicode/non-round
+  e adversarial float; verificati byte-per-byte.
+- **Divergenza §13**: default Anthropic `claude-sonnet-5` (non alias rischiato `claude-3-5-sonnet-latest`).
+  Si applica solo se profilo senza modello; utente può sovrascrivere.
+
+Verifica: build, `go vet` e `go test ./...` verdi; golden tenant_context.json match col Python.
+
+**Residuo dominio D**: unità 2b (profili + rotte `/api/ai/models`) e unità 2c (chat handler +
+generate-config builder + context finalizer).
