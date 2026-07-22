@@ -3,23 +3,35 @@ package collect
 import (
 	"context"
 	"net"
+	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/driver"
 )
 
-// Ping: apertura TCP sulla 22 come proxy di raggiungibilità (niente ICMP raw,
-// che su Windows richiederebbe privilegi). Sufficiente per il "ping check" UI.
+// Ping: verifica la raggiungibilità di un host tramite ICMP ping di sistema
+// (ping -n 1 -w 1500 su Windows, ping -c 1 -W 2 su Unix) con fallback su probe TCP (porta 22).
 func Ping(ctx context.Context, host string) bool {
-	d := net.Dialer{Timeout: 2 * time.Second}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, "22"))
-	if err != nil {
-		return false
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.CommandContext(ctx, "ping", "-n", "1", "-w", "1500", host)
+	} else {
+		cmd = exec.CommandContext(ctx, "ping", "-c", "1", "-W", "2", host)
 	}
-	_ = conn.Close()
-	return true
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+
+	d := net.Dialer{Timeout: 3500 * time.Millisecond}
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, "22"))
+	if err == nil {
+		_ = conn.Close()
+		return true
+	}
+	return false
 }
 
 type TriageResult struct {

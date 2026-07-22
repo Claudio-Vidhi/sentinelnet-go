@@ -592,10 +592,14 @@ function renderIdentitiesPanel() {
         if (!name) return '';
         name = String(name).trim();
         const abbr = [
-            [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
-            [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],
-            [/^Hu(?=\d)/, 'HundredGigE'], [/^Fa(?=\d)/, 'FastEthernet'],
-            [/^Eth(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
+            [/^(?:Gi|Ge)(?=\d)/i, 'GigabitEthernet'],
+            [/^Te(?=\d)/i, 'TenGigabitEthernet'],
+            [/^Fo(?=\d)/i, 'FortyGigE'],
+            [/^Twe(?=\d)/i, 'TwentyFiveGigE'],
+            [/^Hu(?=\d)/i, 'HundredGigE'],
+            [/^(?:Fa|Fe)(?=\d)/i, 'FastEthernet'],
+            [/^(?:Eth?|Ethernet)(?=\d)/i, 'Ethernet'],
+            [/^(?:Po|Port-?channel)(?=\d)/i, 'Port-channel'],
         ];
         for (const [pat, full] of abbr) {
             if (pat.test(name)) return name.replace(pat, full);
@@ -620,7 +624,12 @@ function renderIdentitiesPanel() {
             if (res && res.ok) {
                 const d = await res.json();
                 const want = expandIface(port).toLowerCase();
-                iface = (d.interfaces || []).find(i => expandIface(i.name).toLowerCase() === want) || null;
+                const normPort = (port || '').toLowerCase().replace(/[\s\-_]/g, '');
+                iface = (d.interfaces || []).find(i => {
+                    const expanded = expandIface(i.name).toLowerCase();
+                    const normIface = (i.name || '').toLowerCase().replace(/[\s\-_]/g, '');
+                    return expanded === want || normIface === normPort;
+                }) || null;
             }
         } catch (e) { /* trattato come non trovato */ }
 

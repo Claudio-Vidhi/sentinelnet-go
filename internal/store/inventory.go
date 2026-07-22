@@ -228,11 +228,18 @@ type VendorMeta struct {
 	Driver   string `json:"driver"`
 }
 
-// ListVendors: merge dei vendor di sistema (cisco/hpe) con quelli custom.
+// ListVendors: merge dei vendor di sistema con quelli custom.
 func (s *Store) ListVendors() (map[string]VendorMeta, error) {
 	out := map[string]VendorMeta{
-		"cisco": {EUVDTerm: "cisco", Driver: "cisco_ios"},
-		"hpe":   {EUVDTerm: "hpe", Driver: "hp_procurve"},
+		"cisco":      {EUVDTerm: "cisco", Driver: "cisco_ios"},
+		"cisco_cbs":  {EUVDTerm: "cisco", Driver: "cisco_s300"},
+		"hpe":        {EUVDTerm: "hewlett packard enterprise", Driver: "hp_procurve"},
+		"juniper":    {EUVDTerm: "juniper networks", Driver: "juniper_junos"},
+		"aruba":      {EUVDTerm: "aruba networks", Driver: "aruba_os"},
+		"fortinet":   {EUVDTerm: "fortinet", Driver: "fortinet"},
+		"paloalto":   {EUVDTerm: "palo alto networks", Driver: "paloalto_panos"},
+		"cisco_wlc":  {EUVDTerm: "cisco", Driver: "cisco_wlc"},
+		"cisco_9800": {EUVDTerm: "cisco", Driver: "cisco_9800"},
 	}
 	rows, err := s.DB.Query(`SELECT name, COALESCE(euvd_term,''), COALESCE(driver,'') FROM vendors`)
 	if err != nil {

@@ -11,11 +11,12 @@ import (
 )
 
 type identitySchema struct {
-	Name     string `json:"name"`
-	Tenant   string `json:"tenant"`
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Secret   string `json:"secret"`
+	Name         string `json:"name"`
+	Tenant       string `json:"tenant"`
+	Username     string `json:"username"`
+	Password     string `json:"password"`
+	Secret       string `json:"secret"`
+	EnableSecret string `json:"enable_secret"`
 }
 
 func newIdentityID() string {
@@ -87,6 +88,11 @@ func (a *App) handleCreateIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	secretVal := req.Secret
+	if secretVal == "" {
+		secretVal = req.EnableSecret
+	}
+
 	passEnc := ""
 	if req.Password != "" && a.vault != nil {
 		enc, err := a.vault.Encrypt(req.Password)
@@ -98,8 +104,8 @@ func (a *App) handleCreateIdentity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	secEnc := ""
-	if req.Secret != "" && a.vault != nil {
-		enc, err := a.vault.Encrypt(req.Secret)
+	if secretVal != "" && a.vault != nil {
+		enc, err := a.vault.Encrypt(secretVal)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "errore cifratura enable secret")
 			return
@@ -107,8 +113,19 @@ func (a *App) handleCreateIdentity(w http.ResponseWriter, r *http.Request) {
 		secEnc = enc
 	}
 
+	// Se esiste già un'identità con lo stesso nome nel tenant, aggiorna quella esistente
+	targetID := newIdentityID()
+	if existingList, err := a.store.ListIdentities(tenant); err == nil {
+		for _, existing := range existingList {
+			if strings.EqualFold(existing.Name, name) {
+				targetID = existing.ID
+				break
+			}
+		}
+	}
+
 	ident := &store.Identity{
-		ID:          newIdentityID(),
+		ID:          targetID,
 		Name:        name,
 		Tenant:      tenant,
 		Username:    strings.TrimSpace(req.Username),
@@ -121,7 +138,7 @@ func (a *App) handleCreateIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	a.auditLog("Identità credenziali '" + name + "' (tenant '" + tenant + "') creata dall'utente '" + claims.Username + "'.")
+	a.auditLog("Identità credenziali '" + name + "' (tenant '" + tenant + "') salvata dall'utente '" + claims.Username + "'.")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":   "success",
 		"identity": map[string]any{"id": ident.ID, "name": ident.Name, "tenant": tenant},

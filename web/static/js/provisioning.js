@@ -45,28 +45,37 @@ document.getElementById('btnNewIdentity').addEventListener('click', () => {
 document.getElementById('btnCancelIdentity').addEventListener('click', () =>
     document.getElementById('identityForm').style.display = 'none');
 document.getElementById('btnSaveIdentity').addEventListener('click', async () => {
-    const id = document.getElementById('identEditId').value;
-    const payload = {
-        name: document.getElementById('identName').value.trim(),
-        tenant: document.getElementById('devGroupSelect').value,
-        username: document.getElementById('identUser').value.trim(),
-        password: document.getElementById('identPass').value,
-        enable_secret: document.getElementById('identSecret').value,
-    };
-    if (!payload.name || !payload.username || !payload.password) {
-        alert(i18n[currentLang].alertIdentityFields); return;
-    }
-    const res = await apiFetch(id ? '/api/identities/' + id : '/api/identities', {
-        method: id ? 'PUT' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-    if (res && res.ok) {
-        document.getElementById('identityForm').style.display = 'none';
-        await refreshIdentityOptions(); renderIdentitiesPanel();
-    } else if (res) {
-        const err = await res.json();
-        alert(err.detail || 'Errore');
+    const btn = document.getElementById('btnSaveIdentity');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    try {
+        const id = document.getElementById('identEditId').value;
+        const secretVal = document.getElementById('identSecret').value;
+        const payload = {
+            name: document.getElementById('identName').value.trim(),
+            tenant: document.getElementById('devGroupSelect').value,
+            username: document.getElementById('identUser').value.trim(),
+            password: document.getElementById('identPass').value,
+            secret: secretVal,
+            enable_secret: secretVal,
+        };
+        if (!payload.name || !payload.username || !payload.password) {
+            alert(i18n[currentLang].alertIdentityFields); return;
+        }
+        const res = await apiFetch(id ? '/api/identities/' + id : '/api/identities', {
+            method: id ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res && res.ok) {
+            document.getElementById('identityForm').style.display = 'none';
+            await refreshIdentityOptions(); renderIdentitiesPanel();
+        } else if (res) {
+            const err = await res.json();
+            alert(err.detail || 'Errore');
+        }
+    } finally {
+        btn.disabled = false;
     }
 });
 

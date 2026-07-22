@@ -111,12 +111,17 @@ func Dial(ctx context.Context, host string, creds Credentials) (*Session, error)
 	initial := s.drain(2 * time.Second)
 	s.prompt = detectPrompt(initial)
 
-	// Entra in enable se abbiamo un secret e il prompt è in modo user (>).
-	if creds.EnableSecret != "" && strings.HasSuffix(strings.TrimSpace(s.prompt), ">") {
+	// Entra in enable se il prompt è in modo user (>). Se l'apparato entra direttamente
+	// in enable (#, es. priv 15 / FortiGate / Linux), non serve inviare "enable".
+	if strings.HasSuffix(strings.TrimSpace(s.prompt), ">") {
 		s.writeLine("enable")
 		out := s.drain(1500 * time.Millisecond)
 		if strings.Contains(strings.ToLower(out), "password") {
-			s.writeLine(creds.EnableSecret)
+			sec := creds.EnableSecret
+			if sec == "" {
+				sec = creds.Password // fallback alla password principale se enable secret non è specificato
+			}
+			s.writeLine(sec)
 			s.drain(1500 * time.Millisecond)
 		}
 	}
@@ -243,13 +248,22 @@ type InteractiveBridge struct {
 
 func DialInteractive(ctx context.Context, host string, creds Credentials, onData func([]byte)) (*InteractiveBridge, error) {
 	cfg := &ssh.ClientConfig{
-		User:            creds.Username,
-		Auth:            []ssh.AuthMethod{ssh.Password(creds.Password)},
+		User: creds.Username,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(creds.Password),
+			ssh.KeyboardInteractive(func(_, _ string, questions []string, _ []bool) ([]string, error) {
+				ans := make([]string, len(questions))
+				for i := range ans {
+					ans[i] = creds.Password
+				}
+				return ans, nil
+			}),
+		},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec
 		Timeout:         12 * time.Second,
 		Config: ssh.Config{
-			KeyExchanges: []string{"diffie-hellman-group14-sha1", "diffie-hellman-group1-sha1", "diffie-hellman-group14-sha256", "curve25519-sha256"},
-			Ciphers:      []string{"aes128-ctr", "aes192-ctr", "aes256-ctr", "aes128-cbc", "3des-cbc"},
+			KeyExchanges: []string{"diffie-hellman-group14-sha1", "diffie-hellman-group1-sha1", "diffie-hellman-group-exchange-sha1", "diffie-hellman-group14-sha256", "curve25519-sha256", "ecdh-sha2-nistp256"},
+			Ciphers:      []string{"aes128-ctr", "aes192-ctr", "aes256-ctr", "aes128-cbc", "3des-cbc", "aes128-gcm@openssh.com"},
 		},
 	}
 	port := creds.Port

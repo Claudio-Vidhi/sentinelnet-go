@@ -231,14 +231,15 @@ func (a *App) runScan(jobID string, hosts []string, req scanReq) {
 			result := map[string]any{"ip": ip, "reachable": false, "ssh_ok": false, "hostname": "", "vendor": req.Vendor, "added": false}
 			if collect.Ping(hctx, ip) {
 				result["reachable"] = true
-				if res := collect.RunBackupAndTriage(hctx, ip, creds, drv); res.Status == "success" {
-					result["ssh_ok"] = true
-					result["hostname"] = res.Hostname
-					if req.AutoAdd {
-						if err := a.store.UpsertDeviceForPromotion(ip, strings.ToLower(req.Vendor), req.Group, res.Hostname); err == nil {
-							_ = a.store.UpsertVersion(ip, strings.ToLower(req.Vendor), res.Version, "online")
-							result["added"] = true
-						}
+			}
+			if res := collect.RunBackupAndTriage(hctx, ip, creds, drv); res.Status == "success" {
+				result["reachable"] = true
+				result["ssh_ok"] = true
+				result["hostname"] = res.Hostname
+				if req.AutoAdd {
+					if err := a.store.UpsertDeviceForPromotion(ip, strings.ToLower(req.Vendor), req.Group, res.Hostname); err == nil {
+						_ = a.store.UpsertVersion(ip, strings.ToLower(req.Vendor), res.Version, "online")
+						result["added"] = true
 					}
 				}
 			}
