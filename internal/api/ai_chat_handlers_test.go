@@ -224,7 +224,12 @@ func TestGenerateConfigTemplatePath(t *testing.T) {
 	// User prompt should mention the new hostname.
 	msgs, _ := captured["messages"].([]any)
 	last, _ := msgs[len(msgs)-1].(map[string]any)
-	if !strings.Contains(last["content"].(string), "sw-new") {
+	userPrompt := last["content"].(string)
+	if !strings.Contains(userPrompt, "sw-new") {
 		t.Errorf("user prompt missing hostname: %+v", last)
+	}
+	// Regression guard: verify exact parity with Python source (segnaposto singular)
+	if !strings.Contains(userPrompt, "usa segnaposto espliciti.") {
+		t.Errorf("user prompt missing expected text 'usa segnaposto espliciti.': %s", userPrompt)
 	}
 }

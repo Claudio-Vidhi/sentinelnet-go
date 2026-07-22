@@ -302,7 +302,7 @@ func (a *App) handleAIGenerateConfig(w http.ResponseWriter, r *http.Request) {
 		"', basandoti su " + source + ". Dati del nuovo switch:\n" + strings.Join(requestLines, "\n") + "\n" +
 		"Riusa i parametri d'ambiente comuni (VLAN, VTP, NTP, syslog, AAA, DNS, SNMP, subnet di management) " +
 		"adattandoli al nuovo dispositivo. Rispondi con UN solo blocco di codice contenente la configurazione " +
-		"completa, seguito da brevi note sulle scelte fatte. Non inventare credenziali: usa segnaposti espliciti."
+		"completa, seguito da brevi note sulle scelte fatte. Non inventare credenziali: usa segnaposto espliciti."
 
 	budget := ai.ContextCharBudget(profile.Provider, profile.Model, profile.ContextBudgetChars)
 	blocks := ai.FitContext([]string{context}, budget, question)
