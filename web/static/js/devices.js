@@ -1079,14 +1079,15 @@
     }
 
     function applyPingResultsToTable(results) {
+        if (!results) return;
         const rows = document.querySelectorAll("#deviceTableBody tr");
         rows.forEach(row => {
-            const ipCell = row.cells[3]; // IP is at index 3 — Hostname column shifted it right
-            if (!ipCell) return;
-            const ip = ipCell.querySelector("strong")?.textContent?.trim();
+            const ipStrong = row.querySelector("td strong");
+            if (!ipStrong) return;
+            const ip = ipStrong.textContent.trim();
             if (!ip || !(ip in results)) return;
 
-            const ledContainer = row.cells[0].querySelector(".led-container");
+            const ledContainer = row.cells[0]?.querySelector(".led-container");
             if (!ledContainer) return;
 
             const alive     = results[ip];
