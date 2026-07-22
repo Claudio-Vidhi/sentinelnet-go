@@ -272,3 +272,19 @@ chiavi `ai_profiles`/`ai_active_profile` mancano, senza codice di migrazione.
 `rate_limit_rpm` è persistito nel profilo come int semplice (0 = nessun limite).
 Il tipo `*int` che distingue None da 0 riguarda solo il passaggio a `chat()`
 (unità 2c), non lo storage del profilo.
+
+---
+
+## 15. Context builder AI: mac stats per-tenant e 404 su backup illeggibile
+
+Porta dei `_*_context` di `routers/ai.py` (unità 2c-1).
+
+- `deviceRunningConfigContext`: `configanalyzer.LoadBackupRunningConfig`
+  collassa "nessun backup" e "file illeggibile" in un solo bool, quindi un
+  backup presente ma illeggibile restituisce 404 anziché il 500 del Python. Il
+  caso è di fatto irraggiungibile (il file è appena stato trovato da
+  `FindFreshestBackup`).
+- `tenantContextBlock`: le statistiche MAC del contesto tenant usano
+  `store.MacStatsScoped([]string{tenant})` (conteggi filtrati per tenant, parità
+  con `mac_history.stats(tenants=[tenant])`). `store.MacStats()` globale resta
+  invariato per gli altri chiamanti.
