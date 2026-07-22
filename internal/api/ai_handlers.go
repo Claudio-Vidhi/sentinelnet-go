@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ai"
+	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -186,4 +187,87 @@ func (a *App) handleCreateAIProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	a.auditLog("Profilo AI '" + p.Name + "' creato (provider='" + provider + "') dall'utente '" + claims.Username + "'.")
 	writeJSON(w, http.StatusOK, maskProfile(p))
+}
+
+type aiProfileUpdateReq struct {
+	Name               *string `json:"name"`
+	Provider           *string `json:"provider"`
+	Model              *string `json:"model"`
+	APIKey             *string `json:"api_key"`
+	BaseURL            *string `json:"base_url"`
+	RateLimitRPM       *int    `json:"rate_limit_rpm"`
+	AllowUnredacted    *bool   `json:"allow_unredacted"`
+	ContextBudgetChars *int    `json:"context_budget_chars"`
+}
+
+// handleUpdateAIProfile: PUT /api/ai/profiles/{id} (admin). Aggiornamento
+// parziale: campo assente/null = non modificare; api_key="" rimuove la chiave.
+func (a *App) handleUpdateAIProfile(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	var req aiProfileUpdateReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	list, active := a.loadProfiles()
+	p := findProfile(list, chi.URLParam(r, "id"))
+	if p == nil {
+		writeErr(w, http.StatusNotFound, "Profilo AI non trovato.")
+		return
+	}
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			writeErr(w, http.StatusBadRequest, "Il nome del profilo è obbligatorio.")
+			return
+		}
+		p.Name = name
+	}
+	if req.Provider != nil {
+		provider := strings.ToLower(strings.TrimSpace(*req.Provider))
+		if !aiProviders[provider] {
+			writeErr(w, http.StatusBadRequest, "Provider non supportato: '"+provider+"'.")
+			return
+		}
+		p.Provider = provider
+	}
+	if req.Model != nil {
+		p.Model = strings.TrimSpace(*req.Model)
+	}
+	if req.BaseURL != nil {
+		p.BaseURL = strings.TrimSpace(*req.BaseURL)
+	}
+	if req.RateLimitRPM != nil {
+		p.RateLimitRPM = clampNonNeg(*req.RateLimitRPM)
+	}
+	if req.ContextBudgetChars != nil {
+		p.ContextBudgetChars = clampNonNeg(*req.ContextBudgetChars)
+	}
+	// api_key nil = mantiene; "" = rimuove; valore = cifra e sostituisce.
+	if req.APIKey != nil {
+		if *req.APIKey == "" {
+			p.APIKeyEnc = ""
+		} else {
+			enc, err := a.vault.Encrypt(*req.APIKey)
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			p.APIKeyEnc = enc
+		}
+	}
+	if req.AllowUnredacted != nil {
+		p.AllowUnredacted = *req.AllowUnredacted
+	}
+	// Difesa in profondità: il flag non-redatto è valido solo su provider locali.
+	if err := assertUnredactedAllowed(p.AllowUnredacted, p.Provider, p.BaseURL); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := a.saveProfiles(list, active); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.auditLog("Profilo AI '" + p.Name + "' aggiornato dall'utente '" + claims.Username + "'.")
+	writeJSON(w, http.StatusOK, maskProfile(*p))
 }

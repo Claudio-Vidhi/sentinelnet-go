@@ -12,6 +12,7 @@ import (
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/crypto"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 func newTestApp(t *testing.T) *App {
@@ -32,6 +33,14 @@ func newTestApp(t *testing.T) *App {
 func adminReq(method, target, body string) *http.Request {
 	req := httptest.NewRequest(method, target, bytes.NewReader([]byte(body)))
 	return req.WithContext(context.WithValue(req.Context(), claimsKey, &auth.Claims{Username: "admin", Role: "admin"}))
+}
+
+// withIDParam inietta il parametro di rotta chi {id} preservando i claims già
+// impostati da adminReq (stesso pattern di withIPParam in fortigate_handlers_test.go).
+func withIDParam(r *http.Request, id string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", id)
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
 }
 
 func TestProfilesEmptyByDefault(t *testing.T) {
@@ -154,5 +163,53 @@ func TestCreateAndListProfile(t *testing.T) {
 	}
 	if profs, _ := lst["profiles"].([]any); len(profs) != 1 {
 		t.Errorf("profiles length = %d, want 1", len(profs))
+	}
+}
+
+func TestUpdateProfilePartial(t *testing.T) {
+	app := newTestApp(t)
+	// Seed un profilo con chiave.
+	rec := httptest.NewRecorder()
+	app.handleCreateAIProfile(rec, adminReq("POST", "/api/ai/profiles",
+		`{"name":"P","provider":"anthropic","api_key":"sk-orig"}`))
+	list, _ := app.loadProfiles()
+	id := list[0].ID
+	origEnc := list[0].APIKeyEnc
+
+	call := func(body string) *httptest.ResponseRecorder {
+		req := withIDParam(adminReq("PUT", "/api/ai/profiles/"+id, body), id)
+		rec := httptest.NewRecorder()
+		app.handleUpdateAIProfile(rec, req)
+		return rec
+	}
+
+	// api_key assente → chiave invariata; cambia solo il nome.
+	if rec := call(`{"name":"Nuovo"}`); rec.Code != 200 {
+		t.Fatalf("update name: %d %s", rec.Code, rec.Body.String())
+	}
+	list, _ = app.loadProfiles()
+	if list[0].Name != "Nuovo" || list[0].APIKeyEnc != origEnc {
+		t.Errorf("name update should keep key: name=%q key=%q", list[0].Name, list[0].APIKeyEnc)
+	}
+
+	// api_key="" → rimuove la chiave.
+	if rec := call(`{"api_key":""}`); rec.Code != 200 {
+		t.Fatalf("clear key: %d", rec.Code)
+	}
+	list, _ = app.loadProfiles()
+	if list[0].APIKeyEnc != "" {
+		t.Error("empty api_key should remove stored key")
+	}
+
+	// nome vuoto esplicito → 400.
+	if rec := call(`{"name":"  "}`); rec.Code != 400 {
+		t.Errorf("blank name: status = %d, want 400", rec.Code)
+	}
+
+	// id inesistente → 404.
+	rec = httptest.NewRecorder()
+	app.handleUpdateAIProfile(rec, withIDParam(adminReq("PUT", "/api/ai/profiles/zzz", `{"name":"x"}`), "zzz"))
+	if rec.Code != 404 {
+		t.Errorf("missing id: status = %d, want 404", rec.Code)
 	}
 }
