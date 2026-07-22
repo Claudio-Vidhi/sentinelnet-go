@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ai"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/configanalyzer"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
@@ -84,6 +85,86 @@ func (a *App) fortigateLiveContext(w http.ResponseWriter, r *http.Request, ip st
 		lines = append(lines, fmt.Sprintf("Configurazione completa (fonte %s):\n%s", cfg.Source, text))
 	}
 	return strings.Join(lines, "\n\n"), true
+}
+
+// tenantContextBlock: contesto completo di un tenant/sede (dispositivi, gruppo,
+// sedi VPN, MAC history) scoped e verificato. Porta di _tenant_context_block.
+func (a *App) tenantContextBlock(w http.ResponseWriter, r *http.Request, tenant string) (string, bool) {
+	claims := claimsFrom(r.Context())
+	exists, _ := a.store.TenantExists(tenant)
+	if !exists {
+		writeErr(w, http.StatusNotFound, "Sede/tenant '"+tenant+"' non trovata.")
+		return "", false
+	}
+	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
+	if !canSeeTenant(scoped, tenant) {
+		writeErr(w, http.StatusForbidden, "tenant non consentito")
+		return "", false
+	}
+
+	allDevices, _ := a.store.ListDevices()
+	devices := []map[string]any{}
+	siteIDs := map[string]bool{}
+	for _, d := range allDevices {
+		if d.Tenant != tenant {
+			continue
+		}
+		devices = append(devices, map[string]any{
+			"IP": d.IP, "Hostname": d.Hostname, "Vendor": d.Vendor, "Site": d.Site,
+		})
+		sid := d.Site
+		if sid == "" {
+			sid = "central"
+		}
+		siteIDs[sid] = true
+	}
+
+	var groupInfo map[string]any
+	if tenants, err := a.store.ListTenants(); err == nil {
+		for _, tn := range tenants {
+			if tn.Name == tenant {
+				groupInfo = map[string]any{"description": tn.Description}
+				break
+			}
+		}
+	}
+
+	sites := []map[string]any{}
+	for sid := range siteIDs {
+		if s, err := a.store.GetSite(sid); err == nil && s != nil {
+			site := map[string]any{"id": s.ID, "name": s.Name, "mode": s.Mode, "subnets": s.Subnets}
+			if s.LastSeen != nil {
+				site["last_seen"] = *s.LastSeen
+			}
+			sites = append(sites, site)
+		}
+	}
+
+	sightings, macs, switches, _ := a.store.MacStatsScoped([]string{tenant})
+	macStats := map[string]any{
+		"sightings": sightings, "unique_macs": macs, "switches": switches,
+	}
+	if a.obsMgr != nil {
+		macStats["retention_days"] = a.obsMgr.FlowRetentionDays()
+	}
+
+	recent, _ := a.store.SearchSightings("", "", "", "", []string{tenant}, 15)
+	macRecent := make([]map[string]any, 0, len(recent))
+	for _, s := range recent {
+		macRecent = append(macRecent, map[string]any{
+			"mac": s.Mac, "switch_ip": s.SwitchIP, "interface": s.Interface,
+			"vlan": s.Vlan, "last_seen": s.LastSeen,
+		})
+	}
+
+	return ai.BuildTenantContext(ai.TenantContextArgs{
+		Tenant:    tenant,
+		Devices:   devices,
+		GroupInfo: groupInfo,
+		Site:      sites,
+		MacStats:  macStats,
+		MacRecent: macRecent,
+	}), true
 }
 
 // jsonString serializza un valore per il contesto (equivalente di json.dumps

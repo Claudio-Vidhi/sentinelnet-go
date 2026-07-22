@@ -84,3 +84,43 @@ func TestFortigateLiveContextNotFortiGate(t *testing.T) {
 		t.Fatalf("non-fortigate: ok=%v code=%d, want false/400", ok, w.Code)
 	}
 }
+
+func TestTenantContextBlockUnknownTenant(t *testing.T) {
+	app := ctxAppWithDevices(t)
+	w := httptest.NewRecorder()
+	_, ok := app.tenantContextBlock(w, adminCtxReq(""), "nope")
+	if ok || w.Code != 404 {
+		t.Fatalf("unknown tenant: ok=%v code=%d, want false/404", ok, w.Code)
+	}
+}
+
+func TestTenantContextBlockScoped(t *testing.T) {
+	app := ctxAppWithDevices(t)
+	if err := app.store.CreateTenant("acme", "Acme Corp"); err != nil {
+		t.Fatal(err)
+	}
+	// A viewer scoped only to globex must get 403 for acme.
+	req := httptest.NewRequest("POST", "/", nil)
+	req = req.WithContext(context.WithValue(req.Context(), claimsKey, &auth.Claims{Username: "bob", Role: "viewer"}))
+	if err := app.store.SetUserTenants("bob", []string{"globex"}); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	_, ok := app.tenantContextBlock(w, req, "acme")
+	if ok || w.Code != 403 {
+		t.Fatalf("out-of-scope tenant: ok=%v code=%d, want false/403", ok, w.Code)
+	}
+
+	// Admin gets the assembled block with the tenant device listed.
+	w = httptest.NewRecorder()
+	block, ok := app.tenantContextBlock(w, adminCtxReq(""), "acme")
+	if !ok {
+		t.Fatalf("admin block failed: code=%d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(block, "Contesto sede/tenant: acme") || !strings.Contains(block, "10.0.0.1") {
+		t.Errorf("block missing header/device:\n%s", block)
+	}
+	if strings.Contains(block, "10.0.0.2") {
+		t.Errorf("block leaked globex device:\n%s", block)
+	}
+}

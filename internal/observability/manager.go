@@ -75,6 +75,14 @@ func (m *Manager) Config() Config {
 	return m.cfg
 }
 
+// FlowRetentionDays è la finestra di retention (giorni) dei flow_aggregates,
+// usata per annotare il contesto AI per-tenant. 0 se la retention è disattivata.
+func (m *Manager) FlowRetentionDays() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cfg.RetentionDays.FlowAggregates
+}
+
 // Status ritorna lo stato corrente dei listener.
 func (m *Manager) Status() map[string]ListenerStatus {
 	m.mu.Lock()
