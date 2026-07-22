@@ -216,6 +216,7 @@ func (a *App) Router() http.Handler {
 
 	// --- AI Chat (auth) ---
 	r.Post("/api/ai/chat", a.requireAuth("", a.handleAIChat))
+	r.Post("/api/ai/generate-config", a.requireAuth("", a.handleAIGenerateConfig))
 
 	// MCP server (config tool esposti al processo `sentinelnet mcp`)
 	r.Get("/api/mcp/settings", a.requireAuth("admin", a.handleGetMCPSettings))

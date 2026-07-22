@@ -178,3 +178,53 @@ func TestChatInstructionBlockOperatorOnly(t *testing.T) {
 		t.Error("viewer must NOT get the config-proposal instruction block")
 	}
 }
+
+func genReq(body, role string) *http.Request {
+	req := httptest.NewRequest("POST", "/api/ai/generate-config", strings.NewReader(body))
+	return req.WithContext(context.WithValue(req.Context(), claimsKey, &auth.Claims{Username: "u", Role: role}))
+}
+
+func TestGenerateConfigMissingFields(t *testing.T) {
+	app := chatApp(t)
+	srv := fakeOllama(t, "ok", nil)
+	seedOllamaProfile(t, app, srv.URL)
+	w := httptest.NewRecorder()
+	app.handleAIGenerateConfig(w, genReq(`{"tenant":"","hostname":""}`, "admin"))
+	if w.Code != 400 {
+		t.Fatalf("missing fields: code=%d, want 400", w.Code)
+	}
+}
+
+func TestGenerateConfigTemplatePath(t *testing.T) {
+	app := chatApp(t)
+	dir := t.TempDir()
+	app.cfg = mkCfg(dir)
+	must := func(e error) {
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
+	must(app.store.CreateTenant("acme", ""))
+	must(app.store.UpsertDevice(&store.Device{IP: "10.0.0.1", Vendor: "cisco", Tenant: "acme", Site: "central"}))
+	writeBackup(t, dir, "10.0.0.1", "hostname sw1\nntp server 10.0.0.250\n")
+	var captured map[string]any
+	srv := fakeOllama(t, "config generata", &captured)
+	seedOllamaProfile(t, app, srv.URL)
+
+	w := httptest.NewRecorder()
+	app.handleAIGenerateConfig(w, genReq(`{"tenant":"acme","hostname":"sw-new","template_ip":"10.0.0.1"}`, "admin"))
+	if w.Code != 200 {
+		t.Fatalf("template path: code=%d body=%s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["reply"] != "config generata" {
+		t.Errorf("unexpected reply: %+v", resp)
+	}
+	// User prompt should mention the new hostname.
+	msgs, _ := captured["messages"].([]any)
+	last, _ := msgs[len(msgs)-1].(map[string]any)
+	if !strings.Contains(last["content"].(string), "sw-new") {
+		t.Errorf("user prompt missing hostname: %+v", last)
+	}
+}

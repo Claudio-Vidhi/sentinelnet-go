@@ -197,7 +197,7 @@ func (a *App) assembleChatContext(w http.ResponseWriter, r *http.Request, req *a
 		add(a.topFlowsContext(scoped, keys))
 	}
 
-	instructionBlocks := a.chatInstructionBlocks(req, claims.Role) // Task 3 (returns nil until then)
+	instructionBlocks := a.chatInstructionBlocks(req, claims.Role)
 
 	if len(contextBlocks) == 0 && len(instructionBlocks) == 0 {
 		return messages, true
@@ -245,4 +245,78 @@ func (a *App) chatInstructionBlocks(req *aiChatReq, role string) []string {
 			"Non usare il blocco per comandi show/diagnostici. Non proporre " +
 			"comandi distruttivi (reload, erase, write erase, format).",
 	}
+}
+
+// handleAIGenerateConfig: POST /api/ai/generate-config (utente autenticato).
+// Genera la config di un NUOVO switch del tenant da un template o dai parametri
+// comuni dell'ambiente. Porta di ai_generate_config.
+func (a *App) handleAIGenerateConfig(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	profile, apiKey, ok := a.chatProfileAndKey(w)
+	if !ok {
+		return
+	}
+	var req aiGenerateConfigReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	tenant := strings.TrimSpace(req.Tenant)
+	hostname := strings.TrimSpace(req.Hostname)
+	if tenant == "" || hostname == "" {
+		writeErr(w, http.StatusBadRequest, "Tenant e hostname sono obbligatori.")
+		return
+	}
+	if !a.assertGroupAllowed(w, r, tenant) {
+		return
+	}
+
+	var context, source string
+	if req.TemplateIP != "" {
+		block, ok := a.deviceRunningConfigContext(w, r, req.TemplateIP)
+		if !ok {
+			return
+		}
+		context = block
+		source = "la running-config del dispositivo template " + req.TemplateIP
+	} else {
+		block, ok := a.tenantCommonParameters(w, r, tenant)
+		if !ok {
+			return
+		}
+		context = block
+		source = "i parametri comuni dell'ambiente del tenant"
+	}
+
+	requestLines := []string{"- hostname: " + hostname}
+	if mgmt := strings.TrimSpace(req.MgmtIP); mgmt != "" {
+		requestLines = append(requestLines, "- IP di management: "+mgmt)
+	}
+	if notes := strings.TrimSpace(req.Notes); notes != "" {
+		if len(notes) > 1000 {
+			notes = notes[:1000]
+		}
+		requestLines = append(requestLines, "- note aggiuntive: "+notes)
+	}
+	question := "Genera la configurazione completa proposta per un NUOVO switch del tenant '" + tenant +
+		"', basandoti su " + source + ". Dati del nuovo switch:\n" + strings.Join(requestLines, "\n") + "\n" +
+		"Riusa i parametri d'ambiente comuni (VLAN, VTP, NTP, syslog, AAA, DNS, SNMP, subnet di management) " +
+		"adattandoli al nuovo dispositivo. Rispondi con UN solo blocco di codice contenente la configurazione " +
+		"completa, seguito da brevi note sulle scelte fatte. Non inventare credenziali: usa segnaposti espliciti."
+
+	budget := ai.ContextCharBudget(profile.Provider, profile.Model, profile.ContextBudgetChars)
+	blocks := ai.FitContext([]string{context}, budget, question)
+	messages := []ai.Message{
+		{Role: "system", Content: strings.Join(blocks, "\n\n")},
+		{Role: "user", Content: question},
+	}
+	reply, ok := a.runChat(w, profile, apiKey, messages)
+	if !ok {
+		return
+	}
+	a.auditLog("Config nuovo switch '" + hostname + "' (tenant '" + tenant + "') generata via AI dall'utente '" + claims.Username + "'.")
+	writeJSON(w, http.StatusOK, map[string]any{
+		"reply": reply, "provider": profile.Provider,
+		"model": chatModelName(profile), "profile_name": profile.Name,
+	})
 }
