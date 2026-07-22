@@ -7,8 +7,10 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ai"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/obsstore"
 )
 
 type aiChatMessage struct {
@@ -122,8 +124,12 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 	for i, m := range req.Messages {
 		messages[i] = ai.Message{Role: m.Role, Content: m.Content}
 	}
-	reply, ok := a.runChat(w, profile, apiKey, messages)
+	messages, ok = a.assembleChatContext(w, r, &req, profile, messages)
 	if !ok {
+		return
+	}
+	reply, ok2 := a.runChat(w, profile, apiKey, messages)
+	if !ok2 {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -131,3 +137,93 @@ func (a *App) handleAIChat(w http.ResponseWriter, r *http.Request) {
 		"model": chatModelName(profile), "profile_name": profile.Name,
 	})
 }
+
+// assembleChatContext costruisce i blocchi di contesto dagli attach flag e, se
+// presenti, antepone un messaggio di sistema (contesto adattato al budget +
+// blocco istruzioni fuori budget). Porta della parte contesto di ai_chat.
+func (a *App) assembleChatContext(w http.ResponseWriter, r *http.Request, req *aiChatReq, profile *aiProfile, messages []ai.Message) ([]ai.Message, bool) {
+	claims := claimsFrom(r.Context())
+	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
+
+	var contextBlocks []string
+	add := func(s string) { contextBlocks = append(contextBlocks, s) }
+
+	if req.AttachInventory {
+		add(a.deviceInventorySummary(scoped))
+	}
+	if req.AttachDeviceIP != "" {
+		block, ok := a.deviceRunningConfigContext(w, r, req.AttachDeviceIP)
+		if !ok {
+			return nil, false
+		}
+		add(block)
+	}
+	for _, ip := range capStrings(req.AttachDeviceIPs, 20) {
+		if ip == req.AttachDeviceIP {
+			continue
+		}
+		block, ok := a.deviceRunningConfigContext(w, r, ip)
+		if !ok {
+			return nil, false
+		}
+		add(block)
+	}
+	if req.AttachTenant != "" {
+		block, ok := a.tenantContextBlock(w, r, req.AttachTenant)
+		if !ok {
+			return nil, false
+		}
+		add(block)
+	}
+	if req.AttachFortigateIP != "" {
+		block, ok := a.fortigateLiveContext(w, r, req.AttachFortigateIP)
+		if !ok {
+			return nil, false
+		}
+		add(block)
+	}
+	if req.AttachTopFlows || len(req.AttachFlowKeys) > 0 {
+		var keys []obsstore.FlowKey
+		if len(req.AttachFlowKeys) > 0 {
+			if len(req.AttachFlowKeys) > 20 {
+				writeErr(w, http.StatusBadRequest, "Troppi flussi selezionati: massimo 20 righe per analisi.")
+				return nil, false
+			}
+			keys = make([]obsstore.FlowKey, len(req.AttachFlowKeys))
+			for i, k := range req.AttachFlowKeys {
+				keys[i] = obsstore.FlowKey{SrcIP: k.SrcIP, DstIP: k.DstIP, Protocol: k.Protocol, DstPort: k.DstPort}
+			}
+		}
+		add(a.topFlowsContext(scoped, keys))
+	}
+
+	instructionBlocks := a.chatInstructionBlocks(req, claims.Role) // Task 3 (returns nil until then)
+
+	if len(contextBlocks) == 0 && len(instructionBlocks) == 0 {
+		return messages, true
+	}
+	budget := ai.ContextCharBudget(profile.Provider, profile.Model, profile.ContextBudgetChars)
+	question := lastUserMessage(messages)
+	contextBlocks = ai.FitContext(contextBlocks, budget, question)
+	sys := ai.Message{Role: "system", Content: strings.Join(append(contextBlocks, instructionBlocks...), "\n\n")}
+	return append([]ai.Message{sys}, messages...), true
+}
+
+func capStrings(s []string, n int) []string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
+}
+
+func lastUserMessage(messages []ai.Message) string {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			return messages[i].Content
+		}
+	}
+	return ""
+}
+
+// chatInstructionBlocks è un placeholder fino al Task 3.
+func (a *App) chatInstructionBlocks(req *aiChatReq, role string) []string { return nil }

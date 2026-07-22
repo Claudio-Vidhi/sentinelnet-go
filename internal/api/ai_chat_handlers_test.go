@@ -85,3 +85,47 @@ func TestChatBasicReply(t *testing.T) {
 		t.Errorf("unexpected response: %+v", resp)
 	}
 }
+
+func TestChatAttachInventoryInSystemMsg(t *testing.T) {
+	app := chatApp(t)
+	must := func(e error) {
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
+	must(app.store.UpsertDevice(&store.Device{IP: "10.0.0.1", Hostname: "sw1", Vendor: "cisco", Tenant: "acme", Site: "central"}))
+	var captured map[string]any
+	srv := fakeOllama(t, "ok", &captured)
+	seedOllamaProfile(t, app, srv.URL)
+
+	w := httptest.NewRecorder()
+	app.handleAIChat(w, chatReq(`{"messages":[{"role":"user","content":"che dispositivi ci sono?"}],"attach_inventory":true}`, "admin"))
+	if w.Code != 200 {
+		t.Fatalf("code=%d body=%s", w.Code, w.Body.String())
+	}
+	// The fake server must have received a system message containing the inventory.
+	msgs, _ := captured["messages"].([]any)
+	if len(msgs) < 2 {
+		t.Fatalf("expected system+user messages, got %d", len(msgs))
+	}
+	sys, _ := msgs[0].(map[string]any)
+	if sys["role"] != "system" || !strings.Contains(sys["content"].(string), "Inventario dispositivi") {
+		t.Errorf("system message missing inventory: %+v", sys)
+	}
+}
+
+func TestChatTooManyFlowKeys(t *testing.T) {
+	app := chatApp(t)
+	srv := fakeOllama(t, "ok", nil)
+	seedOllamaProfile(t, app, srv.URL)
+	keys := make([]string, 21)
+	for i := range keys {
+		keys[i] = `{"src_ip":"10.0.0.1","dst_ip":"8.8.8.8","protocol":6,"dst_port":443}`
+	}
+	body := `{"messages":[{"role":"user","content":"x"}],"attach_flow_keys":[` + strings.Join(keys, ",") + `]}`
+	w := httptest.NewRecorder()
+	app.handleAIChat(w, chatReq(body, "admin"))
+	if w.Code != 400 {
+		t.Fatalf("too many flow keys: code=%d, want 400", w.Code)
+	}
+}
