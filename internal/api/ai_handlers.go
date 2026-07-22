@@ -321,3 +321,62 @@ func (a *App) handleActivateAIProfile(w http.ResponseWriter, r *http.Request) {
 	a.auditLog("Profilo AI attivo impostato su '" + p.Name + "' dall'utente '" + claims.Username + "'.")
 	writeJSON(w, http.StatusOK, map[string]any{"status": "success", "active_profile": id})
 }
+
+// handleListAIModels: GET /api/ai/models?provider=&profile_id= (admin).
+// Elenca i modelli chat di un provider usando chiave/base_url del profilo
+// indicato o di quello attivo. Porta di list_ai_models.
+func (a *App) handleListAIModels(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	list, active := a.loadProfiles()
+	profile := findProfile(list, q.Get("profile_id"))
+	if profile == nil {
+		profile = findProfile(list, active)
+	}
+	prov := strings.ToLower(strings.TrimSpace(q.Get("provider")))
+	if prov == "" && profile != nil {
+		prov = strings.ToLower(strings.TrimSpace(profile.Provider))
+	}
+	if prov == "" {
+		writeErr(w, http.StatusBadRequest, "Nessun provider AI configurato.")
+		return
+	}
+	// Se il profilo risolto usa un altro provider, preferisci un profilo che
+	// usi 'prov' e abbia una chiave (o sia ollama), per validarlo prima di salvarlo.
+	if profile != nil && strings.ToLower(strings.TrimSpace(profile.Provider)) != prov {
+		for i := range list {
+			pv := strings.ToLower(strings.TrimSpace(list[i].Provider))
+			if pv == prov && (list[i].APIKeyEnc != "" || prov == "ollama") {
+				profile = &list[i]
+				break
+			}
+		}
+	}
+	apiKey := ""
+	baseURL := ""
+	if profile != nil {
+		if profile.APIKeyEnc != "" {
+			dec, err := a.vault.Decrypt(profile.APIKeyEnc)
+			if err != nil {
+				writeErr(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			apiKey = dec
+		}
+		baseURL = profile.BaseURL
+	}
+	models, err := ai.ListModels(prov, apiKey, baseURL)
+	if err != nil {
+		var e *ai.Error
+		if errors.As(err, &e) {
+			writeErr(w, http.StatusBadGateway, e.Error())
+			return
+		}
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"provider":      prov,
+		"models":        models,
+		"default_model": ai.GetDefaultModel(prov),
+	})
+}

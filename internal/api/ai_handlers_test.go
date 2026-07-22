@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ai"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/crypto"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
@@ -260,5 +261,53 @@ func TestDeleteAndActivate(t *testing.T) {
 	app.handleActivateAIProfile(rec, withIDParam(adminReq("POST", "/api/ai/profiles/zzz/activate", ""), "zzz"))
 	if rec.Code != 404 {
 		t.Errorf("missing activate: status = %d, want 404", rec.Code)
+	}
+}
+
+func TestListAIModelsResolvesProfile(t *testing.T) {
+	// Endpoint ollama finto: risponde a /api/tags.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/tags" {
+			_, _ = w.Write([]byte(`{"models":[{"name":"llama3"},{"name":"qwen"}]}`))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	t.Cleanup(srv.Close)
+
+	app := newTestApp(t)
+	rec := httptest.NewRecorder()
+	app.handleCreateAIProfile(rec, adminReq("POST", "/api/ai/profiles",
+		`{"name":"O","provider":"ollama","base_url":"`+srv.URL+`"}`))
+	if rec.Code != 200 {
+		t.Fatalf("seed profile: %d %s", rec.Code, rec.Body.String())
+	}
+
+	// Nessun provider/profile_id: usa il profilo attivo (ollama).
+	rec = httptest.NewRecorder()
+	app.handleListAIModels(rec, adminReq("GET", "/api/ai/models", ""))
+	if rec.Code != 200 {
+		t.Fatalf("models: %d %s", rec.Code, rec.Body.String())
+	}
+	var out map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	if out["provider"] != "ollama" {
+		t.Errorf("provider = %v", out["provider"])
+	}
+	models, _ := out["models"].([]any)
+	if len(models) != 2 {
+		t.Errorf("models length = %d, want 2", len(models))
+	}
+	if out["default_model"] != ai.GetDefaultModel("ollama") {
+		t.Errorf("default_model = %v", out["default_model"])
+	}
+}
+
+func TestListAIModelsNoProviderIsError(t *testing.T) {
+	app := newTestApp(t) // nessun profilo, nessuna query provider
+	rec := httptest.NewRecorder()
+	app.handleListAIModels(rec, adminReq("GET", "/api/ai/models", ""))
+	if rec.Code != 400 {
+		t.Errorf("no provider: status = %d, want 400", rec.Code)
 	}
 }
