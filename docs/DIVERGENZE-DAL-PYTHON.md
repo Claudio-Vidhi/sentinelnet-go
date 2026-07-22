@@ -259,3 +259,16 @@ restano verbatim dal Python.
 **Effetto**: una chat su Anthropic con profilo senza modello impostato usa
 `claude-sonnet-5` anziché l'alias rischiato. Quando il profilo imposta un
 modello, quello vince e non c'è divergenza.
+
+---
+
+## 14. Profili AI: nessuna migrazione dal formato legacy singolo
+
+`routers/ai.py` (`_get_ai_profiles_raw`) migra, alla prima lettura, il vecchio
+dict singolo `ai` di `app_settings.json` nella lista `ai_profiles`. Il server Go
+non ha mai scritto quel formato: `loadProfiles` parte da lista vuota quando le
+chiavi `ai_profiles`/`ai_active_profile` mancano, senza codice di migrazione.
+
+`rate_limit_rpm` è persistito nel profilo come int semplice (0 = nessun limite).
+Il tipo `*int` che distingue None da 0 riguarda solo il passaggio a `chat()`
+(unità 2c), non lo storage del profilo.
