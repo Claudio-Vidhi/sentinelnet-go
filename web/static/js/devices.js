@@ -1044,10 +1044,13 @@
         const btn = document.getElementById("btnPingCheck");
         const filterSelect = document.getElementById("filterGroupSelect");
         const group = filterSelect ? filterSelect.value : "all";
-        const groupLabel = group === "all" ? i18n[currentLang].allSites : group;
 
         btn.disabled = true;
-        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${i18n[currentLang].pingingBtnText.replace("{group}", groupLabel)}`;
+        const origContent = btn.innerHTML;
+        const loadingText = currentLang === 'en' ? 'Pinging...' : 'Ping in corso...';
+        btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> ${loadingText}`;
+
+        const startTime = Date.now();
 
         try {
             const res = await apiFetch("/api/ping-check", {
@@ -1065,7 +1068,12 @@
             console.error("Ping check error:", err);
         }
 
-        btn.innerHTML = i18n[currentLang].btnPingCheck;
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 450) {
+            await new Promise(r => setTimeout(r, 450 - elapsed));
+        }
+
+        btn.innerHTML = origContent;
         btn.disabled = false;
         pingInProgress = false;
     }
