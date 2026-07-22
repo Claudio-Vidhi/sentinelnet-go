@@ -1005,5 +1005,30 @@ Note:
 
 Verifica: build, `go vet` e `go test ./...` verdi; golden tenant_context.json match col Python.
 
-**Residuo dominio D**: unità 2b (profili + rotte `/api/ai/models`) e unità 2c (chat handler +
-generate-config builder + context finalizer).
+### 2026-07-22 — Dominio D: AI Assistant 2b, 2c-1, 2c-2, Identity Manager e MCP Client Preview
+
+| Intervento | File |
+|---|---|
+| AI Profiles CRUD + `/api/ai/models`. | `internal/api/ai_handlers.go` |
+| AI Context Layer: 6 context builder (`deviceInventorySummary`, `deviceRunningConfigContext`, `fortigateLiveContext`, `tenantContextBlock`, `tenantCommonParameters`, `topFlowsContext`). | `internal/api/ai_context.go` |
+| AI Chat & Generate Config Endpoints: `/api/ai/chat` e `/api/ai/generate-config` con budget adattivo e instruction block per proposal config. | `internal/api/ai_chat_handlers.go` |
+| Identity Manager (Dominio D / Security): migrazione `0011_identities.sql`, store CRUD con cifratura Vault AES-GCM, risoluzione credenziali per `identity:<id>`, rotte `/api/identities`. | `internal/store/migrations/0011_identities.sql`, `internal/store/identities.go`, `internal/api/identity_handlers.go` |
+| MCP Client Preview: rotte `/api/mcp-client/*`, gating `mcp_preview_enabled`, cifratura token auth server esterni via Vault. | `internal/api/mcp_client_handlers.go` |
+
+Note:
+- **Tutte le rotte dell'AI Assistant e dell'MCP Server/Client sono ora completamente portate e coperte da test**.
+- **Identity Manager porta completa parità con `security/identity_manager.py`**: memorizzazione profili credenziali nominati in SQLite, cifratura AES-GCM dei segreti, risoluzione per apparati con profilo `identity:<id>`, gating eliminazione se in uso da dispositivi (409 Conflict).
+- **MCP Client Preview porta parità con `routers/mcp_client.py`**: gating tramite `mcp_preview_enabled`, cifratura token auth via Vault, proxying tool list & call verso server MCP esterni.
+
+Verifica: `go test ./...` e `go build ./...` verdi su tutti i package del repository.
+
+### 2026-07-22 — Visio Diagram Export (`POST /api/map/export/vsdx`)
+
+| Intervento | File |
+|---|---|
+| Visio `.vsdx` OPC ZIP generator: forme 2-D dispositivi, forme 1-D collegamenti ortogonali, primitive grafiche frontend e punti di aggancio/glue dinamico (`Connection` & `Connects`). | `internal/export/visio.go`, `internal/export/visio_test.go` |
+| Endpoint HTTP `POST /api/map/export/vsdx`: risponde con `application/vnd.ms-visio.drawing` e `Content-Disposition: attachment; filename=sentinelnet-map.vsdx`. | `internal/api/topology_handlers.go`, `internal/api/visio_export_handlers_test.go`, `internal/api/router.go` |
+
+Verifica: `go test ./...` e `go build ./...` verdi su tutti i package del repository.
+
+

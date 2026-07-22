@@ -75,6 +75,7 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/network-map", a.requireAuth("", a.handleNetworkMap))
 	r.Get("/api/portchannels", a.requireAuth("", a.handlePortchannels))
 	r.Post("/api/topology/reset", a.requireAuth("operator", a.handleTopologyReset))
+	r.Post("/api/map/export/vsdx", a.requireAuth("", a.handleExportMapVSDX))
 
 	// --- Triage / commands / ping ---
 	r.Post("/api/send-command", a.requireAuth("operator", a.handleSendCommand))
@@ -218,10 +219,25 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/ai/chat", a.requireAuth("", a.handleAIChat))
 	r.Post("/api/ai/generate-config", a.requireAuth("", a.handleAIGenerateConfig))
 
+	// --- Identità credenziali (auth read, operator write) ---
+	r.Get("/api/identities", a.requireAuth("", a.handleListIdentities))
+	r.Post("/api/identities", a.requireAuth("operator", a.handleCreateIdentity))
+	r.Put("/api/identities/{id}", a.requireAuth("operator", a.handleUpdateIdentity))
+	r.Delete("/api/identities/{id}", a.requireAuth("operator", a.handleDeleteIdentity))
+
 	// MCP server (config tool esposti al processo `sentinelnet mcp`)
 	r.Get("/api/mcp/settings", a.requireAuth("admin", a.handleGetMCPSettings))
 	r.Post("/api/mcp/settings", a.requireAuth("admin", a.handleSetMCPSettings))
 	r.Get("/api/mcp/tool-config", a.requireAuth("", a.handleGetMCPToolConfig))
+
+	// --- MCP Client (preview, admin) ---
+	r.Get("/api/mcp-client/settings", a.requireAuth("admin", a.handleGetMCPClientSettings))
+	r.Post("/api/mcp-client/preview", a.requireAuth("admin", a.handleSetMCPClientPreview))
+	r.Get("/api/mcp-client/servers", a.requireAuth("admin", a.handleListMCPClientServers))
+	r.Post("/api/mcp-client/servers", a.requireAuth("admin", a.handleUpsertMCPClientServer))
+	r.Delete("/api/mcp-client/servers/{name}", a.requireAuth("admin", a.handleDeleteMCPClientServer))
+	r.Get("/api/mcp-client/{name}/tools", a.requireAuth("admin", a.handleGetMCPClientTools))
+	r.Post("/api/mcp-client/{name}/call", a.requireAuth("admin", a.handleCallMCPClientTool))
 
 	// --- WS terminal ---
 	r.Post("/api/ws-token", a.requireAuth("operator", a.handleWSToken))

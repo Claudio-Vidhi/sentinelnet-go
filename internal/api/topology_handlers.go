@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/export"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/topology"
 )
 
@@ -352,4 +353,32 @@ func (a *App) handlePromoteDevice(w http.ResponseWriter, r *http.Request) {
 		_ = a.store.AssignMeta(req.IP, fields)
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+type visioExportReq struct {
+	Nodes      []export.VisioNode       `json:"nodes"`
+	Edges      []export.VisioEdge       `json:"edges"`
+	Primitives *export.VisioPrimitives `json:"primitives"`
+	Connectors []export.VisioConnector  `json:"connectors"`
+}
+
+func (a *App) handleExportMapVSDX(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	var req visioExportReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+
+	data, err := export.BuildVSDX(req.Nodes, req.Edges, req.Primitives, req.Connectors)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	a.auditLog("Export Visio mappa richiesto dall'utente '" + claims.Username + "'.")
+	w.Header().Set("Content-Type", "application/vnd.ms-visio.drawing")
+	w.Header().Set("Content-Disposition", "attachment; filename=sentinelnet-map.vsdx")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
