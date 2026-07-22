@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+	"time"
 )
 
 // MaxLimit e MaxWindow limitano le query esposte via API.
@@ -179,6 +180,87 @@ func (s *Store) GraphFlows(cutoff int64, scope []string, limit int) ([]GraphFlow
 	return out, rows.Err()
 }
 
+// TopFlowsContext ritorna i top flussi aggregati della finestra (scoped per
+// tenant, con opzionale vincolo per-tupla keys) e le anomalie correlate aperte
+// delle ultime 24h. Porta di observability.summary.top_flows_context. Lo scope
+// tenant è sempre in AND: i keys forniti dal client non estraggono righe di
+// altri tenant.
+func (s *Store) TopFlowsContext(cutoff int64, scope []string, keys []FlowKey, limit int) ([]TopFlow, []Anomaly, error) {
+	clause, args := tenantClause(scope)
+
+	flowClause := ""
+	if len(keys) > 0 {
+		parts := make([]string, 0, len(keys))
+		kargs := []any{}
+		for _, k := range keys {
+			if k.DstPort == nil {
+				parts = append(parts, "(src_ip = ? AND dst_ip = ? AND protocol = ? AND dst_port IS NULL)")
+				kargs = append(kargs, k.SrcIP, k.DstIP, k.Protocol)
+			} else {
+				parts = append(parts, "(src_ip = ? AND dst_ip = ? AND protocol = ? AND dst_port = ?)")
+				kargs = append(kargs, k.SrcIP, k.DstIP, k.Protocol, *k.DstPort)
+			}
+		}
+		flowClause = " AND (" + strings.Join(parts, " OR ") + ")"
+		args = append(args, kargs...)
+	}
+
+	flowParams := append([]any{cutoff}, args...)
+	flowParams = append(flowParams, limit)
+	rows, err := s.DB.Query(`
+		SELECT tenant, src_ip, dst_ip, protocol, dst_port,
+		       SUM(total_bytes), SUM(total_packets)
+		FROM flow_aggregates
+		WHERE window_start >= ?`+clause+flowClause+`
+		GROUP BY tenant, src_ip, dst_ip, protocol, dst_port
+		ORDER BY SUM(total_bytes) DESC
+		LIMIT ?`, flowParams...)
+	if err != nil {
+		return nil, nil, err
+	}
+	flows := []TopFlow{}
+	for rows.Next() {
+		var f TopFlow
+		var proto, port sql.NullInt64
+		if err := rows.Scan(&f.Tenant, &f.SrcIP, &f.DstIP, &proto, &port, &f.TotalBytes, &f.TotalPackets); err != nil {
+			rows.Close()
+			return nil, nil, err
+		}
+		f.Protocol, f.DstPort = nullInt(proto), nullInt(port)
+		flows = append(flows, f)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	// Anomalie correlate aperte, ultime 24h, scope tenant in AND.
+	aClause, aArgs := tenantClause(scope)
+	anomParams := append([]any{time.Now().Unix() - 86400}, aArgs...)
+	arows, err := s.DB.Query(`
+		SELECT tenant, COALESCE(kind,''), COALESCE(src_ip,''), COALESCE(dst_ip,''),
+		       COALESCE(switch_port,''), severity
+		FROM correlated_events
+		WHERE status != 'resolved' AND created_ts >= ?`+aClause+`
+		ORDER BY created_ts DESC
+		LIMIT 10`, anomParams...)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer arows.Close()
+	anomalies := []Anomaly{}
+	for arows.Next() {
+		var a Anomaly
+		var sev sql.NullInt64
+		if err := arows.Scan(&a.Tenant, &a.Kind, &a.SrcIP, &a.DstIP, &a.SwitchPort, &sev); err != nil {
+			return nil, nil, err
+		}
+		a.Severity = nullInt(sev)
+		anomalies = append(anomalies, a)
+	}
+	return flows, anomalies, arows.Err()
+}
+
 // CountNewAnomalies conta le anomalie ancora aperte nella finestra (KPI "spikes").
 func (s *Store) CountNewAnomalies(cutoff int64, scope []string) (int, error) {
 	clause, args := tenantClause(scope)
@@ -320,6 +402,15 @@ func (s *Store) SecurityEvents(cutoff int64, actions []string, highSeverityMax i
 		out = append(out, e)
 	}
 	return out, rows.Err()
+}
+
+// FlowKey vincola il contesto top-flussi a una tupla specifica (11.3). DstPort
+// nil = confronto con dst_port IS NULL.
+type FlowKey struct {
+	SrcIP    string
+	DstIP    string
+	Protocol int
+	DstPort  *int
 }
 
 // FlowEvidence è il bucket di flusso che corrobora un evento di sicurezza.
