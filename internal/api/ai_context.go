@@ -11,12 +11,66 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ai"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/configanalyzer"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/obsstore"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
+
+// topFlowsContext: blocco markdown dei top flussi (900s, top 20) scoped per
+// tenant, con opzionale vincolo per-tupla keys. Porta di top_flows_context.
+// Se l'osservabilità non è collegata, ritorna comunque header + nota vuota.
+func (a *App) topFlowsContext(scoped []string, keys []obsstore.FlowKey) string {
+	const windowS = 900
+	var flows []obsstore.TopFlow
+	var anomalies []obsstore.Anomaly
+	if a.obs != nil {
+		cutoff := time.Now().Unix() - windowS
+		flows, anomalies, _ = a.obs.TopFlowsContext(cutoff, scoped, keys, 20)
+	}
+	lines := []string{fmt.Sprintf("## Top flussi di rete (ultimi %d minuti, %d aggregati)", windowS/60, len(flows))}
+	if len(flows) == 0 {
+		lines = append(lines, "(nessun flusso registrato nella finestra)")
+	}
+	for _, f := range flows {
+		proto := "?"
+		if f.Protocol != nil {
+			// Use same protocol map as flowgraph, but uppercase for output
+			protoLower := map[int]string{6: "tcp", 17: "udp", 1: "icmp"}
+			if name, ok := protoLower[*f.Protocol]; ok {
+				proto = strings.ToUpper(name)
+			} else {
+				proto = strconv.Itoa(*f.Protocol)
+			}
+		}
+		dport := "-"
+		if f.DstPort != nil {
+			dport = strconv.Itoa(*f.DstPort)
+		}
+		lines = append(lines, fmt.Sprintf("- [%s] %s → %s %s/%s: %d byte, %d pacchetti",
+			f.Tenant, f.SrcIP, f.DstIP, proto, dport, f.TotalBytes, f.TotalPackets))
+	}
+	if len(anomalies) > 0 {
+		lines = append(lines, "\n## Anomalie correlate aperte (ultime 24h)")
+		for _, an := range anomalies {
+			port := ""
+			if an.SwitchPort != "" {
+				port = " — porta " + an.SwitchPort
+			}
+			sev := "?"
+			if an.Severity != nil {
+				sev = strconv.Itoa(*an.Severity)
+			}
+			lines = append(lines, fmt.Sprintf("- [%s] %s sev=%s: %s → %s%s",
+				an.Tenant, an.Kind, sev, an.SrcIP, an.DstIP, port))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
 
 // deviceInventorySummary: riepilogo testuale dell'inventario, scoped per sede.
 // scoped==nil = admin (nessun filtro). Porta di _device_inventory_summary.

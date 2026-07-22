@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/config"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/obsstore"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
 
@@ -177,5 +179,34 @@ func TestTenantContextBlockScoped(t *testing.T) {
 	}
 	if strings.Contains(block, "10.0.0.2") {
 		t.Errorf("block leaked globex device:\n%s", block)
+	}
+}
+
+func TestTopFlowsContextBuilderEmpty(t *testing.T) {
+	app := ctxAppWithDevices(t) // no obs wired
+	out := app.topFlowsContext(nil, nil)
+	if !strings.Contains(out, "Top flussi di rete") || !strings.Contains(out, "nessun flusso registrato") {
+		t.Fatalf("empty/no-obs should still produce header + empty note:\n%s", out)
+	}
+}
+
+func TestTopFlowsContextBuilderFormatsRows(t *testing.T) {
+	app := ctxAppWithDevices(t)
+	obs, err := obsstore.Open(t.TempDir() + "/obs.db", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { obs.DB.Close() })
+	app.obs = obs
+	now := time.Now().Unix()
+	_, err = obs.DB.Exec(`INSERT INTO flow_aggregates
+		(window_start, tenant, src_ip, dst_ip, protocol, dst_port, total_bytes, total_packets, flow_count)
+		VALUES (?,?,?,?,?,?,?,?,1)`, now-60, "acme", "10.0.0.1", "8.8.8.8", 6, 443, 5000, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := app.topFlowsContext([]string{"acme"}, nil)
+	if !strings.Contains(out, "[acme] 10.0.0.1 → 8.8.8.8 TCP/443: 5000 byte, 50 pacchetti") {
+		t.Errorf("row formatting wrong:\n%s", out)
 	}
 }
