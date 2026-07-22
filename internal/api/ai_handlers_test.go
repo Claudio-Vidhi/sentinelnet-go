@@ -1,9 +1,15 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"encoding/base64"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/crypto"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
@@ -21,6 +27,11 @@ func newTestApp(t *testing.T) *App {
 		t.Fatal(err)
 	}
 	return NewApp(nil, st, nil, vault)
+}
+
+func adminReq(method, target, body string) *http.Request {
+	req := httptest.NewRequest(method, target, bytes.NewReader([]byte(body)))
+	return req.WithContext(context.WithValue(req.Context(), claimsKey, &auth.Claims{Username: "admin", Role: "admin"}))
 }
 
 func TestProfilesEmptyByDefault(t *testing.T) {
@@ -80,5 +91,68 @@ func TestAssertUnredactedAllowed(t *testing.T) {
 	}
 	if assertUnredactedAllowed(true, "anthropic", "") == nil {
 		t.Error("anthropic must be rejected")
+	}
+}
+
+func TestCreateAndListProfile(t *testing.T) {
+	app := newTestApp(t)
+
+	// Nome vuoto → 400.
+	rec := httptest.NewRecorder()
+	app.handleCreateAIProfile(rec, adminReq("POST", "/api/ai/profiles", `{"name":"","provider":"ollama"}`))
+	if rec.Code != 400 {
+		t.Fatalf("empty name: status = %d, want 400", rec.Code)
+	}
+
+	// Provider non valido → 400.
+	rec = httptest.NewRecorder()
+	app.handleCreateAIProfile(rec, adminReq("POST", "/api/ai/profiles", `{"name":"x","provider":"foo"}`))
+	if rec.Code != 400 {
+		t.Fatalf("bad provider: status = %d, want 400", rec.Code)
+	}
+
+	// unredacted su provider remoto → 400.
+	rec = httptest.NewRecorder()
+	app.handleCreateAIProfile(rec, adminReq("POST", "/api/ai/profiles",
+		`{"name":"x","provider":"anthropic","allow_unredacted":true}`))
+	if rec.Code != 400 {
+		t.Fatalf("unredacted remote: status = %d, want 400", rec.Code)
+	}
+
+	// Creazione valida con chiave.
+	rec = httptest.NewRecorder()
+	app.handleCreateAIProfile(rec, adminReq("POST", "/api/ai/profiles",
+		`{"name":"Primo","provider":"anthropic","api_key":"sk-123","rate_limit_rpm":-5}`))
+	if rec.Code != 200 {
+		t.Fatalf("create: status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	if created["api_key_set"] != true || created["rate_limit_rpm"] != float64(0) {
+		t.Errorf("created payload wrong: %+v", created)
+	}
+	if _, ok := created["api_key_enc"]; ok {
+		t.Error("create response must not leak api_key_enc")
+	}
+
+	// Il primo profilo diventa attivo; la chiave è cifrata a riposo.
+	list, active := app.loadProfiles()
+	if len(list) != 1 || active != list[0].ID {
+		t.Fatalf("first profile should be active: %d active=%q", len(list), active)
+	}
+	if list[0].APIKeyEnc == "" || list[0].APIKeyEnc == "sk-123" {
+		t.Errorf("api key must be stored encrypted, got %q", list[0].APIKeyEnc)
+	}
+
+	// List riporta il profilo mascherato e l'attivo.
+	rec = httptest.NewRecorder()
+	app.handleListAIProfiles(rec, adminReq("GET", "/api/ai/profiles", ""))
+	var lst map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &lst)
+	if lst["active_profile"] != active {
+		t.Errorf("active_profile = %v, want %v", lst["active_profile"], active)
+	}
+	if profs, _ := lst["profiles"].([]any); len(profs) != 1 {
+		t.Errorf("profiles length = %d, want 1", len(profs))
 	}
 }

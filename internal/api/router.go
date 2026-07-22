@@ -206,6 +206,10 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/settings/app", a.requireAuth("admin", a.handleGetAppSettings))
 	r.Post("/api/settings/app", a.requireAuth("admin", a.handleSetAppSettings))
 
+	// --- AI Profiles (adm) ---
+	r.Get("/api/ai/profiles", a.requireAuth("admin", a.handleListAIProfiles))
+	r.Post("/api/ai/profiles", a.requireAuth("admin", a.handleCreateAIProfile))
+
 	// MCP server (config tool esposti al processo `sentinelnet mcp`)
 	r.Get("/api/mcp/settings", a.requireAuth("admin", a.handleGetMCPSettings))
 	r.Post("/api/mcp/settings", a.requireAuth("admin", a.handleSetMCPSettings))

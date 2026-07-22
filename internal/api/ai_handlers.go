@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ai"
@@ -110,4 +111,79 @@ func clampNonNeg(v int) int {
 		return 0
 	}
 	return v
+}
+
+type aiProfileReq struct {
+	Name               string `json:"name"`
+	Provider           string `json:"provider"`
+	Model              string `json:"model"`
+	APIKey             string `json:"api_key"`
+	BaseURL            string `json:"base_url"`
+	RateLimitRPM       int    `json:"rate_limit_rpm"`
+	AllowUnredacted    bool   `json:"allow_unredacted"`
+	ContextBudgetChars int    `json:"context_budget_chars"`
+}
+
+// handleListAIProfiles: GET /api/ai/profiles (admin). Chiavi mascherate.
+func (a *App) handleListAIProfiles(w http.ResponseWriter, r *http.Request) {
+	list, active := a.loadProfiles()
+	masked := make([]map[string]any, 0, len(list))
+	for _, p := range list {
+		masked = append(masked, maskProfile(p))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"profiles": masked, "active_profile": active})
+}
+
+// handleCreateAIProfile: POST /api/ai/profiles (admin).
+func (a *App) handleCreateAIProfile(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	var req aiProfileReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	provider := strings.ToLower(strings.TrimSpace(req.Provider))
+	if !aiProviders[provider] {
+		writeErr(w, http.StatusBadRequest, "Provider non supportato: '"+provider+"'.")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeErr(w, http.StatusBadRequest, "Il nome del profilo è obbligatorio.")
+		return
+	}
+	if err := assertUnredactedAllowed(req.AllowUnredacted, provider, req.BaseURL); err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	enc := ""
+	if req.APIKey != "" {
+		var err error
+		if enc, err = a.vault.Encrypt(req.APIKey); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	list, active := a.loadProfiles()
+	p := aiProfile{
+		ID:                 newProfileID(),
+		Name:               name,
+		Provider:           provider,
+		Model:              strings.TrimSpace(req.Model),
+		BaseURL:            strings.TrimSpace(req.BaseURL),
+		APIKeyEnc:          enc,
+		RateLimitRPM:       clampNonNeg(req.RateLimitRPM),
+		AllowUnredacted:    req.AllowUnredacted,
+		ContextBudgetChars: clampNonNeg(req.ContextBudgetChars),
+	}
+	list = append(list, p)
+	if active == "" {
+		active = p.ID
+	}
+	if err := a.saveProfiles(list, active); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.auditLog("Profilo AI '" + p.Name + "' creato (provider='" + provider + "') dall'utente '" + claims.Username + "'.")
+	writeJSON(w, http.StatusOK, maskProfile(p))
 }
