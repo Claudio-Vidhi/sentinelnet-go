@@ -55,12 +55,17 @@ func (a *App) fgtSSH(d *store.Device) fortigate.SSHRunner {
 	}
 }
 
-// fgtDevice risolve l'IP nel device di inventario (con lo scoping tenant di
-// assertDeviceAllowed), verifica che il vendor sia un FortiGate e costruisce
-// il client REST. In caso di esito negativo scrive già la risposta HTTP e
-// ritorna ok=false: il chiamante deve solo fare return.
+// fgtDevice risolve l'IP di rotta nel device di inventario (con lo scoping
+// tenant di assertDeviceAllowed), verifica che il vendor sia un FortiGate e
+// costruisce il client REST. In caso di esito negativo scrive già la
+// risposta HTTP e ritorna ok=false: il chiamante deve solo fare return.
 func (a *App) fgtDevice(w http.ResponseWriter, r *http.Request) (*store.Device, *fortigate.Client, bool) {
-	ip := chi.URLParam(r, "ip")
+	return a.fgtDeviceByIP(w, r, chi.URLParam(r, "ip"))
+}
+
+// fgtDeviceByIP è come fgtDevice ma con l'IP esplicito (non dalla rotta), per i
+// chiamanti che ricevono l'IP dal payload (es. contesto AI).
+func (a *App) fgtDeviceByIP(w http.ResponseWriter, r *http.Request, ip string) (*store.Device, *fortigate.Client, bool) {
 	d, ok := a.assertDeviceAllowed(w, r, ip)
 	if !ok {
 		return nil, nil, false

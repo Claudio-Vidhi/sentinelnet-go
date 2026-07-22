@@ -74,3 +74,13 @@ func TestDeviceRunningConfigContextUnknownDevice(t *testing.T) {
 		t.Fatalf("unknown device: ok=%v code=%d, want false/404", ok, w.Code)
 	}
 }
+
+func TestFortigateLiveContextNotFortiGate(t *testing.T) {
+	app := ctxAppWithDevices(t) // 10.0.0.1 is cisco, not a FortiGate
+	app.cfg = mkCfg(t.TempDir())
+	w := httptest.NewRecorder()
+	_, ok := app.fortigateLiveContext(w, adminCtxReq("10.0.0.1"), "10.0.0.1")
+	if ok || w.Code != 400 {
+		t.Fatalf("non-fortigate: ok=%v code=%d, want false/400", ok, w.Code)
+	}
+}
