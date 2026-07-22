@@ -16,6 +16,9 @@ func (a *App) Router() http.Handler {
 
 	// --- Statico / health (pub) ---
 	r.Get("/", a.serveDashboard)
+	if staticSub, err := fs.Sub(web.Files, "static"); err == nil {
+		r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
+	}
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
 	// Heartbeat dell'interfaccia (pub): la sua assenza arresta il server quando
