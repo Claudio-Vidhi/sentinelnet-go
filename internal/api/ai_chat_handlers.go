@@ -225,5 +225,24 @@ func lastUserMessage(messages []ai.Message) string {
 	return ""
 }
 
-// chatInstructionBlocks è un placeholder fino al Task 3.
-func (a *App) chatInstructionBlocks(req *aiChatReq, role string) []string { return nil }
+// chatInstructionBlocks ritorna il contratto di proposta config (§10.2) quando
+// sono allegate running-config di dispositivi e l'utente è operator+. Il
+// modello PROPONE, non esegue: il browser mostra la proposta e solo dopo
+// conferma esplicita chiama /api/bulk-command (blacklist/RBAC/audit invariati).
+// Tenuto FUORI dal budget: non va mai troncato. Porta di instruction_blocks.
+func (a *App) chatInstructionBlocks(req *aiChatReq, role string) []string {
+	if len(req.AttachDeviceIPs) == 0 || !roleAtLeast(role, "operator") {
+		return nil
+	}
+	return []string{
+		"Se l'utente chiede una modifica di configurazione su uno dei " +
+			"dispositivi allegati, oltre alla spiegazione emetti UN blocco " +
+			"recintato cosi (JSON su una riga, device_ip tra quelli allegati):\n" +
+			"```sentinelnet-config\n" +
+			`{"device_ip": "<ip>", "commands": ["<riga config>", "..."], ` +
+			`"config_mode": true, "save_after": false}` + "\n" +
+			"```\n" +
+			"Non usare il blocco per comandi show/diagnostici. Non proporre " +
+			"comandi distruttivi (reload, erase, write erase, format).",
+	}
+}

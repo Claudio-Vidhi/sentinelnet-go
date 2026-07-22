@@ -6,10 +6,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/config"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/crypto"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
@@ -35,7 +38,8 @@ func fakeOllama(t *testing.T, reply string, captured *map[string]any) *httptest.
 
 func chatApp(t *testing.T) *App {
 	t.Helper()
-	st, err := store.Open(t.TempDir() + "/t.db")
+	tmpDir := t.TempDir()
+	st, err := store.Open(filepath.Join(tmpDir, "t.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +48,15 @@ func chatApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewApp(nil, st, nil, vault)
+	cfg := &config.Config{
+		Addr:    ":8000",
+		DataDir: tmpDir,
+	}
+	// Create backup directory
+	if err := os.MkdirAll(cfg.BackupDir(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	return NewApp(cfg, st, nil, vault)
 }
 
 // seedOllamaProfile creates and activates an ollama profile pointing at baseURL.
@@ -127,5 +139,42 @@ func TestChatTooManyFlowKeys(t *testing.T) {
 	app.handleAIChat(w, chatReq(body, "admin"))
 	if w.Code != 400 {
 		t.Fatalf("too many flow keys: code=%d, want 400", w.Code)
+	}
+}
+
+func TestChatInstructionBlockOperatorOnly(t *testing.T) {
+	app := chatApp(t)
+	if err := app.store.UpsertDevice(&store.Device{IP: "10.0.0.1", Vendor: "cisco", Tenant: "acme", Site: "central"}); err != nil {
+		t.Fatal(err)
+	}
+	// Create a fake running-config backup file
+	backupFile := filepath.Join(app.cfg.BackupDir(), "10.0.0.1.txt")
+	if err := os.WriteFile(backupFile, []byte("interface Gi0/1\n ip address 10.0.0.1 255.255.255.0\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var captured map[string]any
+	srv := fakeOllama(t, "ok", &captured)
+	seedOllamaProfile(t, app, srv.URL)
+
+	body := `{"messages":[{"role":"user","content":"cambia la vlan"}],"attach_device_ips":["10.0.0.1"]}`
+
+	sysContent := func(role string) string {
+		captured = nil
+		w := httptest.NewRecorder()
+		app.handleAIChat(w, chatReq(body, role))
+		if w.Code != 200 {
+			t.Fatalf("%s: code=%d body=%s", role, w.Code, w.Body.String())
+		}
+		msgs, _ := captured["messages"].([]any)
+		sys, _ := msgs[0].(map[string]any)
+		return sys["content"].(string)
+	}
+
+	if !strings.Contains(sysContent("operator"), "sentinelnet-config") {
+		t.Error("operator should get the config-proposal instruction block")
+	}
+	if strings.Contains(sysContent("viewer"), "sentinelnet-config") {
+		t.Error("viewer must NOT get the config-proposal instruction block")
 	}
 }
