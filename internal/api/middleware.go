@@ -43,6 +43,12 @@ func bearerToken(r *http.Request) string {
 	if strings.HasPrefix(h, "Bearer ") {
 		return strings.TrimSpace(h[len("Bearer "):])
 	}
+	if cookie, err := r.Cookie("net_session"); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+	if cookie, err := r.Cookie("token"); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
 	return ""
 }
 

@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/auth"
 )
@@ -87,12 +88,36 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+
+	secure := r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+	http.SetCookie(w, &http.Cookie{
+		Name:     "net_session",
+		Value:    token,
+		Path:     "/",
+		MaxAge:   86400 * 7,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   secure,
+	})
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token":         token,
 		"token_type":           "bearer",
 		"role":                 u.Role,
 		"must_change_password": u.MustChangePassword,
 	})
+}
+
+func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "net_session",
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 type changePwReq struct {

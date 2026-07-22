@@ -30,6 +30,7 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/auth/status", a.handleAuthStatus)
 	r.Post("/api/auth/register", a.handleRegister)
 	r.Post("/api/auth/login", a.handleLogin)
+	r.Post("/api/auth/logout", a.handleLogout)
 	r.Post("/api/auth/change-password", a.requireAuth("", a.handleChangePassword))
 	r.Get("/api/auth/me", a.requireAuth("", a.handleMe))
 
