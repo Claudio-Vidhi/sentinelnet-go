@@ -64,3 +64,21 @@ func TestMaskNeverExposesKey(t *testing.T) {
 		t.Error("api_key_set should be false when key absent")
 	}
 }
+
+func TestAssertUnredactedAllowed(t *testing.T) {
+	if assertUnredactedAllowed(false, "anthropic", "") != nil {
+		t.Error("allow=false must always pass")
+	}
+	if assertUnredactedAllowed(true, "ollama", "") != nil {
+		t.Error("ollama must be allowed")
+	}
+	if assertUnredactedAllowed(true, "openai", "http://127.0.0.1:1234/v1") != nil {
+		t.Error("openai on local base_url must be allowed")
+	}
+	if assertUnredactedAllowed(true, "openai", "https://api.openai.com/v1") == nil {
+		t.Error("openai on remote base_url must be rejected")
+	}
+	if assertUnredactedAllowed(true, "anthropic", "") == nil {
+		t.Error("anthropic must be rejected")
+	}
+}

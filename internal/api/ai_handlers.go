@@ -8,6 +8,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"strings"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ai"
 )
@@ -88,4 +90,24 @@ func newProfileID() string {
 	return hex.EncodeToString(b)
 }
 
-var _ = ai.GetDefaultModel // usato nei task successivi
+// assertUnredactedAllowed rifiuta il flag allow_unredacted sui provider NON
+// locali: le config non redatte possono raggiungere solo LLM locali fidati
+// (fail-closed), come in Python _assert_unredacted_allowed.
+func assertUnredactedAllowed(allow bool, provider, baseURL string) error {
+	if !allow {
+		return nil
+	}
+	p := strings.ToLower(strings.TrimSpace(provider))
+	if p == "ollama" || (p == "openai" && ai.IsLocalBaseURL(baseURL)) {
+		return nil
+	}
+	return errors.New("L'invio di configurazioni non redatte è consentito solo verso LLM locali " +
+		"(provider 'ollama' o endpoint OpenAI-compatible su host locale/privato).")
+}
+
+func clampNonNeg(v int) int {
+	if v < 0 {
+		return 0
+	}
+	return v
+}
