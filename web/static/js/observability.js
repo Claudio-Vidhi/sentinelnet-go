@@ -66,9 +66,10 @@
             api_poll_s: parseInt(document.getElementById('obs_api_poll_s').value, 10)
         };
         OBS_LISTENERS.forEach(l => {
-            payload[`${l}_enabled`] = document.getElementById(`obs_${l}_enabled`).checked;
-            const port = parseInt(document.getElementById(`obs_${l}_port`).value, 10);
-            if (!isNaN(port)) payload[`${l}_port`] = port;
+            const enabled = document.getElementById(`obs_${l}_enabled`) ? document.getElementById(`obs_${l}_enabled`).checked : false;
+            const portVal = parseInt(document.getElementById(`obs_${l}_port`) ? document.getElementById(`obs_${l}_port`).value : '', 10);
+            const port = !isNaN(portVal) ? portVal : OBS_DEFAULT_PORTS[l];
+            payload[l] = { enabled, port };
         });
         const res = await apiFetch('/api/observability/config', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },

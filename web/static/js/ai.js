@@ -473,9 +473,23 @@
                 if (job.status !== 'running') {
                     const entry = (job.results || [])[0];
                     const result = entry ? (entry.result || {}) : { status: 'error', message: currentLang==='en' ? 'device not found in inventory.' : 'dispositivo non trovato in inventario.' };
-                    const ok = result.status === 'success';
-                    setStatus(ok ? (currentLang==='en' ? '✅ Configuration applied.' : '✅ Configurazione applicata.') : (currentLang==='en' ? 'Error: ' : 'Errore: ') + (result.message || (currentLang==='en' ? 'push failed.' : 'invio fallito.')), !ok);
-                    appendAiMessage('assistant', (ok ? (currentLang==='en' ? '✅ Configuration applied to ' : '✅ Configurazione applicata a ') : (currentLang==='en' ? '❌ Push failed to ' : '❌ Invio fallito a ')) + p.device_ip + (result.output ? '\n\n' + result.output : (result.message ? '\n\n' + result.message : '')));
+                    const outputText = (result.output || result.message || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
+                    const hasCliError = /%\s+[A-Za-z]/.test(outputText) || /Invalid input|Error/i.test(outputText);
+                    const isSuccess = result.status === 'success' && !hasCliError;
+
+                    setStatus(isSuccess 
+                        ? (currentLang==='en' ? '✅ Configuration applied.' : '✅ Configurazione applicata.') 
+                        : (currentLang==='en' ? '⚠️ Completed with errors.' : '⚠️ Completato con errori.'), !isSuccess);
+
+                    let msgText = (isSuccess 
+                        ? (currentLang==='en' ? '✅ Configuration applied to ' : '✅ Configurazione applicata a ') 
+                        : (currentLang==='en' ? '⚠️ Configuration completed with warnings/errors on ' : '⚠️ Configurazione completata con avvisi/errori su ')) + p.device_ip;
+                    
+                    if (outputText) {
+                        msgText += ':\n```text\n' + outputText + '\n```';
+                    }
+
+                    appendAiMessage('assistant', msgText);
                     return;
                 }
                 setStatus(currentLang==='en' ? 'Running…' : 'In esecuzione…');
@@ -485,6 +499,18 @@
             setStatus((currentLang==='en' ? 'Network error: ' : 'Errore di rete: ') + e, true);
             card.querySelectorAll('button').forEach(b => b.disabled = false);
         }
+    }
+
+    function formatAiMessageContent(text) {
+        if (!text) return '';
+        let html = escapeHtml(text);
+        // Transform ```lang ... ``` blocks into styled pre blocks
+        html = html.replace(/```(?:[a-zA-Z0-9_\-]+)?\n?([\s\S]*?)```/g, (m, code) => {
+            return `<pre style="background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:10px; margin:6px 0; overflow-x:auto; font-family:var(--font-code); font-size:12px; color:var(--text); white-space:pre-wrap;">${code}</pre>`;
+        });
+        // Transform `code` into styled inline code
+        html = html.replace(/`([^`]+)`/g, '<code style="background:var(--surface-2); padding:2px 5px; border-radius:4px; font-family:var(--font-code); font-size:12px;">$1</code>');
+        return html;
     }
 
     function appendAiMessage(role, text, meta) {
@@ -498,7 +524,7 @@
         div.style.alignItems = isUser ? 'flex-end' : 'flex-start';
         const label = isUser ? (i18n[currentLang].lblAiChatYou || 'Tu') : (meta || (i18n[currentLang].lblAiChatAssistant || 'AI'));
         div.innerHTML = `<div style="font-size:11px; color:var(--text-muted); margin-bottom:3px;">${escapeHtml(label)}</div>
-            <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--accent, #3b82f6)' : 'var(--surface-3)'}; color:${isUser ? '#fff' : 'inherit'}; border-radius:12px; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${escapeHtml(text)}</div>`;
+            <div style="white-space:pre-wrap; max-width:85%; background:${isUser ? 'var(--accent, #3b82f6)' : 'var(--surface-3)'}; color:${isUser ? '#fff' : 'inherit'}; border-radius:12px; ${isUser ? 'border-bottom-right-radius:2px;' : 'border-bottom-left-radius:2px;'} padding:8px 12px; font-size:13px;">${formatAiMessageContent(text)}</div>`;
         box.appendChild(div);
         box.scrollTop = box.scrollHeight;
         return div;

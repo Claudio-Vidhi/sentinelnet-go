@@ -197,12 +197,21 @@ func (s *Session) Run(cmd string) string {
 // RunConfig entra in configurazione, invia le righe, torna in exec.
 func (s *Session) RunConfig(lines []string) string {
 	var out strings.Builder
-	out.WriteString(s.Run("configure terminal"))
-	for _, l := range lines {
-		out.WriteString(s.Run(l))
+	if res := strings.TrimSpace(s.Run("configure terminal")); res != "" {
+		out.WriteString(res)
+		out.WriteString("\n")
 	}
-	out.WriteString(s.Run("end"))
-	return out.String()
+	for _, l := range lines {
+		if res := strings.TrimSpace(s.Run(l)); res != "" {
+			out.WriteString(res)
+			out.WriteString("\n")
+		}
+	}
+	if res := strings.TrimSpace(s.Run("end")); res != "" {
+		out.WriteString(res)
+		out.WriteString("\n")
+	}
+	return strings.TrimSpace(out.String())
 }
 
 func (s *Session) WriteMemory() {
