@@ -8,7 +8,6 @@ import (
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/collect"
 	"go.bug.st/serial"
-	"go.bug.st/serial/enumerator"
 )
 
 // Consegna della config day-0: SSH su un apparato già raggiungibile, oppure
@@ -142,16 +141,12 @@ type SerialPort struct {
 // l'operatore.
 func ListSerialPorts() []SerialPort {
 	out := []SerialPort{}
-	ports, err := enumerator.GetDetailedPortsList()
+	ports, err := serial.GetPortsList()
 	if err != nil {
 		return out
 	}
 	for _, p := range ports {
-		desc := p.Product
-		if desc == "" {
-			desc = p.Name
-		}
-		out = append(out, SerialPort{Device: p.Name, Description: desc})
+		out = append(out, SerialPort{Device: p, Description: p})
 	}
 	return out
 }
