@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/ai"
@@ -193,4 +195,176 @@ func truncRunes(s string, n int) string {
 		return s
 	}
 	return string(rs[:n])
+}
+
+// commonGlobalPrefixes: prefissi di comandi globali IOS considerati "parametri
+// d'ambiente" comuni del tenant. Porta di _COMMON_GLOBAL_PREFIXES.
+var commonGlobalPrefixes = []string{
+	"vtp ", "ntp ", "logging ", "snmp-server ", "aaa ", "ip domain", "ip name-server",
+	"ip default-gateway", "clock timezone", "clock summer-time", "spanning-tree ",
+	"ip ssh ", "service ", "radius ", "tacacs ",
+}
+
+var (
+	reVlanLine  = regexp.MustCompile(`^vlan (\d+)\s*$`)
+	reIfaceVlan = regexp.MustCompile(`^interface vlan\s*(\d+)$`)
+)
+
+// tenantCommonParameters: distilla i parametri COMUNI dell'ambiente di rete di
+// un tenant dai backup dei suoi dispositivi. Porta di _tenant_common_parameters.
+func (a *App) tenantCommonParameters(w http.ResponseWriter, r *http.Request, tenant string) (string, bool) {
+	claims := claimsFrom(r.Context())
+	exists, _ := a.store.TenantExists(tenant)
+	if !exists {
+		writeErr(w, http.StatusNotFound, "Sede/tenant '"+tenant+"' non trovata.")
+		return "", false
+	}
+	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
+	if !canSeeTenant(scoped, tenant) {
+		writeErr(w, http.StatusForbidden, "tenant non consentito")
+		return "", false
+	}
+
+	allDevices, _ := a.store.ListDevices()
+	lineCounts := map[string]int{}
+	vlans := map[string]string{} // id -> name
+	mgmtSubnets := map[string]bool{}
+	analyzed := 0
+	for _, d := range allDevices {
+		if d.Tenant != tenant || d.IP == "" {
+			continue
+		}
+		content, ok := configanalyzer.LoadBackupRunningConfig(a.cfg.BackupDir(), d.IP)
+		if !ok {
+			continue
+		}
+		analyzed++
+		lines := strings.Split(content, "\n")
+		for i, raw := range lines {
+			s := strings.TrimSpace(raw)
+			low := strings.ToLower(s)
+			indented := strings.HasPrefix(raw, " ")
+			if !indented && hasAnyPrefix(low, commonGlobalPrefixes) {
+				lineCounts[s]++
+			}
+			if !indented {
+				if m := reVlanLine.FindStringSubmatch(low); m != nil {
+					name := ""
+					if i+1 < len(lines) {
+						nx := strings.TrimSpace(lines[i+1])
+						if strings.HasPrefix(strings.ToLower(nx), "name ") {
+							name = nx[5:]
+						}
+					}
+					if _, seen := vlans[m[1]]; !seen {
+						vlans[m[1]] = name
+					}
+				}
+			}
+		}
+		if sub := mgmtSubnetFrom(lines); sub != "" {
+			mgmtSubnets[sub] = true
+		}
+		if analyzed >= 15 {
+			break
+		}
+	}
+	if analyzed == 0 {
+		writeErr(w, http.StatusNotFound, "Nessun backup di configurazione disponibile per il tenant '"+tenant+"'.")
+		return "", false
+	}
+
+	threshold := (analyzed + 1) / 2
+	if threshold < 1 {
+		threshold = 1
+	}
+	common := []string{}
+	for l, c := range lineCounts {
+		if c >= threshold {
+			common = append(common, l)
+		}
+	}
+	sort.Strings(common)
+
+	out := []string{fmt.Sprintf(
+		"## Parametri comuni dell'ambiente tenant '%s' (derivati da %d dispositivi)", tenant, analyzed)}
+	if len(vlans) > 0 {
+		ids := make([]string, 0, len(vlans))
+		for id := range vlans {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i, j int) bool { return atoiSafe(ids[i]) < atoiSafe(ids[j]) })
+		parts := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if vlans[id] != "" {
+				parts = append(parts, fmt.Sprintf("%s (%s)", id, vlans[id]))
+			} else {
+				parts = append(parts, id)
+			}
+		}
+		out = append(out, "VLAN in uso: "+strings.Join(parts, ", "))
+	}
+	if len(mgmtSubnets) > 0 {
+		subs := make([]string, 0, len(mgmtSubnets))
+		for s := range mgmtSubnets {
+			subs = append(subs, s)
+		}
+		sort.Strings(subs)
+		out = append(out, "Subnet di management osservate: "+strings.Join(subs, "; "))
+	}
+	if len(common) > 0 {
+		out = append(out, "Comandi globali comuni (presenti su almeno metà dei dispositivi):")
+		for i, l := range common {
+			if i >= 120 {
+				break
+			}
+			out = append(out, "  "+l)
+		}
+	}
+	return strings.Join(out, "\n"), true
+}
+
+func hasAnyPrefix(s string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// mgmtSubnetFrom cerca il primo blocco "interface vlan N" e, tra le sue righe
+// indentate, la prima "ip address A M". Equivalente line-based del regex
+// multiline del Python (evita le insidie di \s+ su newline in RE2).
+func mgmtSubnetFrom(lines []string) string {
+	for i, raw := range lines {
+		if strings.HasPrefix(raw, " ") {
+			continue
+		}
+		m := reIfaceVlan.FindStringSubmatch(strings.ToLower(strings.TrimSpace(raw)))
+		if m == nil {
+			continue
+		}
+		for j := i + 1; j < len(lines); j++ {
+			if !strings.HasPrefix(lines[j], " ") && strings.TrimSpace(lines[j]) != "" {
+				break // fine del blocco interface
+			}
+			f := strings.Fields(strings.TrimSpace(lines[j]))
+			if len(f) >= 4 && f[0] == "ip" && f[1] == "address" {
+				return fmt.Sprintf("VLAN %s: %s %s", m[1], f[2], f[3])
+			}
+		}
+	}
+	return ""
+}
+
+func atoiSafe(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return n
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }

@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -91,6 +93,59 @@ func TestTenantContextBlockUnknownTenant(t *testing.T) {
 	_, ok := app.tenantContextBlock(w, adminCtxReq(""), "nope")
 	if ok || w.Code != 404 {
 		t.Fatalf("unknown tenant: ok=%v code=%d, want false/404", ok, w.Code)
+	}
+}
+
+// writeBackup crea un file di backup che FindFreshestBackup troverà per ip:
+// convenzione reale "<host>-<ip>.txt" (vedi saveBackup in triage_handlers.go),
+// che soddisfa il suffisso "-"+ip+".txt" controllato da FindFreshestBackup.
+func writeBackup(t *testing.T, dataDir, ip, content string) {
+	t.Helper()
+	dir := filepath.Join(dataDir, "backup-config")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	name := filepath.Join(dir, "host-"+ip+".txt")
+	if err := os.WriteFile(name, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTenantCommonParametersNoBackups(t *testing.T) {
+	app := ctxAppWithDevices(t)
+	app.cfg = mkCfg(t.TempDir()) // no backups on disk
+	if err := app.store.CreateTenant("acme", ""); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	_, ok := app.tenantCommonParameters(w, adminCtxReq(""), "acme")
+	if ok || w.Code != 404 {
+		t.Fatalf("no backups: ok=%v code=%d, want false/404", ok, w.Code)
+	}
+}
+
+func TestTenantCommonParametersDistill(t *testing.T) {
+	app := ctxAppWithDevices(t)
+	dir := t.TempDir()
+	app.cfg = mkCfg(dir)
+	if err := app.store.CreateTenant("acme", ""); err != nil {
+		t.Fatal(err)
+	}
+	writeBackup(t, dir, "10.0.0.1", "hostname sw1\nntp server 10.0.0.250\nvlan 10\n name USERS\n")
+	writeBackup(t, dir, "10.0.0.3", "hostname sw3\nntp server 10.0.0.250\n")
+	if err := app.store.UpsertDevice(&store.Device{IP: "10.0.0.3", Vendor: "cisco", Tenant: "acme", Site: "central"}); err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	out, ok := app.tenantCommonParameters(w, adminCtxReq(""), "acme")
+	if !ok {
+		t.Fatalf("distill failed: code=%d", w.Code)
+	}
+	if !strings.Contains(out, "ntp server 10.0.0.250") {
+		t.Errorf("shared ntp line should be common:\n%s", out)
+	}
+	if !strings.Contains(out, "VLAN in uso") || !strings.Contains(out, "10") {
+		t.Errorf("vlan should be listed:\n%s", out)
 	}
 }
 
