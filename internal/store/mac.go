@@ -122,6 +122,28 @@ func (s *Store) MacStats() (sightings, uniqueMacs, switches int, err error) {
 	return
 }
 
+// MacStatsScoped è come MacStats ma filtrato per tenant. tenants==nil = globale
+// (nessun filtro); tenants non-nil vuoto = nessun tenant visibile → tutti zero
+// (parità con mac_history.stats(tenants)). Usato dal contesto AI per-tenant.
+func (s *Store) MacStatsScoped(tenants []string) (sightings, uniqueMacs, switches int, err error) {
+	if tenants != nil && len(tenants) == 0 {
+		return 0, 0, 0, nil
+	}
+	where := ""
+	var args []any
+	if tenants != nil {
+		ph := make([]string, len(tenants))
+		for i, t := range tenants {
+			ph[i] = "?"
+			args = append(args, t)
+		}
+		where = " WHERE tenant IN (" + strings.Join(ph, ",") + ")"
+	}
+	err = s.DB.QueryRow(`SELECT COUNT(*), COUNT(DISTINCT mac), COUNT(DISTINCT switch_ip) FROM mac_sightings`+where, args...).
+		Scan(&sightings, &uniqueMacs, &switches)
+	return
+}
+
 // PruneSightings elimina gli avvistamenti più vecchi di retentionDays.
 func (s *Store) PruneSightings(retentionDays int) (int64, error) {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays).Format(time.RFC3339)
