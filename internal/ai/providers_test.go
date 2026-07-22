@@ -151,7 +151,7 @@ func TestChatAnthropicBuildsRequestAndParses(t *testing.T) {
 	if body["max_tokens"] != float64(2048) {
 		t.Errorf("max_tokens = %v", body["max_tokens"])
 	}
-	if body["model"] != DefaultModels["anthropic"] {
+	if body["model"] != defaultModels["anthropic"] {
 		t.Errorf("model = %v", body["model"])
 	}
 	if body["system"] != "you are a bot" {

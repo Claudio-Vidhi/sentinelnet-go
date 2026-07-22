@@ -11,10 +11,11 @@ import (
 	"time"
 )
 
-// DefaultModels: modello di default per provider quando il profilo non ne
+// defaultModels: modello di default per provider quando il profilo non ne
 // imposta uno. DIVERGENZA §13: anthropic aggiornato a claude-sonnet-5 (il
-// Python aveva claude-3-5-sonnet-latest, alias datato).
-var DefaultModels = map[string]string{
+// Python aveva claude-3-5-sonnet-latest, alias datato). Non esportato: non fa
+// parte dell'API pubblica del package, l'accessor è GetDefaultModel.
+var defaultModels = map[string]string{
 	"anthropic": "claude-sonnet-5",
 	"openai":    "gpt-4o-mini",
 	"gemini":    "gemini-3-flash",
@@ -23,7 +24,7 @@ var DefaultModels = map[string]string{
 
 // GetDefaultModel: default per il provider (minuscolo), "" se ignoto.
 func GetDefaultModel(provider string) string {
-	return DefaultModels[strings.ToLower(strings.TrimSpace(provider))]
+	return defaultModels[strings.ToLower(strings.TrimSpace(provider))]
 }
 
 // normalizeGeminiModel toglie i prefissi "models/" ripetuti (evita
@@ -31,7 +32,7 @@ func GetDefaultModel(provider string) string {
 func normalizeGeminiModel(model string) string {
 	name := strings.TrimSpace(model)
 	if name == "" {
-		name = DefaultModels["gemini"]
+		name = defaultModels["gemini"]
 	}
 	for strings.HasPrefix(name, "models/") {
 		name = name[len("models/"):]

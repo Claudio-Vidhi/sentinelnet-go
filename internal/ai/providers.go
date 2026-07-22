@@ -92,6 +92,7 @@ func postJSON(url string, headers map[string]string, payload any, timeout time.D
 
 // chatAnthropic invia la conversazione ad Anthropic. Porta di _chat_anthropic.
 // Ignora baseURL (endpoint fisso).
+// NON chiamare fuori da Chat: bypasserebbe il choke-point di redazione (I-1).
 func chatAnthropic(msgs []Message, model, apiKey, baseURL string, timeout time.Duration) (string, error) {
 	if apiKey == "" {
 		return "", &Error{Msg: "API key Anthropic mancante."}
@@ -99,7 +100,7 @@ func chatAnthropic(msgs []Message, model, apiKey, baseURL string, timeout time.D
 	system, convo := splitSystem(msgs)
 	m := model
 	if m == "" {
-		m = DefaultModels["anthropic"]
+		m = defaultModels["anthropic"]
 	}
 	convoOut := make([]map[string]string, len(convo))
 	for i, c := range convo {
@@ -145,6 +146,7 @@ func chatAnthropic(msgs []Message, model, apiKey, baseURL string, timeout time.D
 
 // chatOpenAI invia la conversazione a OpenAI (o endpoint compatibile).
 // Porta di _chat_openai. Onora baseURL.
+// NON chiamare fuori da Chat: bypasserebbe il choke-point di redazione (I-1).
 func chatOpenAI(msgs []Message, model, apiKey, baseURL string, timeout time.Duration) (string, error) {
 	if apiKey == "" {
 		return "", &Error{Msg: "API key OpenAI mancante."}
@@ -160,7 +162,7 @@ func chatOpenAI(msgs []Message, model, apiKey, baseURL string, timeout time.Dura
 	}
 	mdl := model
 	if mdl == "" {
-		mdl = DefaultModels["openai"]
+		mdl = defaultModels["openai"]
 	}
 	payload := map[string]any{
 		"model":    mdl,
@@ -197,6 +199,7 @@ var geminiRoleMap = map[string]string{"assistant": "model", "user": "user"}
 
 // chatGemini invia la conversazione a Gemini. Porta di _chat_gemini. Ignora
 // baseURL (endpoint fisso).
+// NON chiamare fuori da Chat: bypasserebbe il choke-point di redazione (I-1).
 func chatGemini(msgs []Message, model, apiKey, baseURL string, timeout time.Duration) (string, error) {
 	if apiKey == "" {
 		return "", &Error{Msg: "API key Gemini mancante."}
@@ -253,6 +256,7 @@ func chatGemini(msgs []Message, model, apiKey, baseURL string, timeout time.Dura
 
 // chatOllama invia la conversazione a un endpoint Ollama. Porta di
 // _chat_ollama. Onora baseURL. Non richiede api_key.
+// NON chiamare fuori da Chat: bypasserebbe il choke-point di redazione (I-1).
 func chatOllama(msgs []Message, model, apiKey, baseURL string, timeout time.Duration) (string, error) {
 	base := baseURL
 	if base == "" {
@@ -265,7 +269,7 @@ func chatOllama(msgs []Message, model, apiKey, baseURL string, timeout time.Dura
 	}
 	mdl := model
 	if mdl == "" {
-		mdl = DefaultModels["ollama"]
+		mdl = defaultModels["ollama"]
 	}
 	payload := map[string]any{
 		"model":    mdl,
