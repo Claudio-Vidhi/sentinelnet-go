@@ -271,3 +271,53 @@ func (a *App) handleUpdateAIProfile(w http.ResponseWriter, r *http.Request) {
 	a.auditLog("Profilo AI '" + p.Name + "' aggiornato dall'utente '" + claims.Username + "'.")
 	writeJSON(w, http.StatusOK, maskProfile(*p))
 }
+
+// handleDeleteAIProfile: DELETE /api/ai/profiles/{id} (admin). Se il profilo
+// era attivo, l'attivo passa al primo rimanente (o vuoto se non ne restano).
+func (a *App) handleDeleteAIProfile(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	id := chi.URLParam(r, "id")
+	list, active := a.loadProfiles()
+	p := findProfile(list, id)
+	if p == nil {
+		writeErr(w, http.StatusNotFound, "Profilo AI non trovato.")
+		return
+	}
+	name := p.Name
+	remaining := make([]aiProfile, 0, len(list))
+	for _, e := range list {
+		if e.ID != id {
+			remaining = append(remaining, e)
+		}
+	}
+	if active == id {
+		active = ""
+		if len(remaining) > 0 {
+			active = remaining[0].ID
+		}
+	}
+	if err := a.saveProfiles(remaining, active); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.auditLog("Profilo AI '" + name + "' eliminato dall'utente '" + claims.Username + "'.")
+	writeJSON(w, http.StatusOK, map[string]any{"status": "success"})
+}
+
+// handleActivateAIProfile: POST /api/ai/profiles/{id}/activate (admin).
+func (a *App) handleActivateAIProfile(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	id := chi.URLParam(r, "id")
+	list, _ := a.loadProfiles()
+	p := findProfile(list, id)
+	if p == nil {
+		writeErr(w, http.StatusNotFound, "Profilo AI non trovato.")
+		return
+	}
+	if err := a.saveProfiles(list, id); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	a.auditLog("Profilo AI attivo impostato su '" + p.Name + "' dall'utente '" + claims.Username + "'.")
+	writeJSON(w, http.StatusOK, map[string]any{"status": "success", "active_profile": id})
+}

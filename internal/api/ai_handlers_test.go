@@ -213,3 +213,52 @@ func TestUpdateProfilePartial(t *testing.T) {
 		t.Errorf("missing id: status = %d, want 404", rec.Code)
 	}
 }
+
+func TestDeleteAndActivate(t *testing.T) {
+	app := newTestApp(t)
+	mk := func(name string) string {
+		rec := httptest.NewRecorder()
+		app.handleCreateAIProfile(rec, adminReq("POST", "/api/ai/profiles",
+			`{"name":"`+name+`","provider":"ollama"}`))
+		var m map[string]any
+		_ = json.Unmarshal(rec.Body.Bytes(), &m)
+		return m["id"].(string)
+	}
+	id1 := mk("A") // diventa attivo
+	id2 := mk("B")
+
+	// activate id2.
+	rec := httptest.NewRecorder()
+	app.handleActivateAIProfile(rec, withIDParam(adminReq("POST", "/api/ai/profiles/"+id2+"/activate", ""), id2))
+	if rec.Code != 200 {
+		t.Fatalf("activate: %d %s", rec.Code, rec.Body.String())
+	}
+	if _, active := app.loadProfiles(); active != id2 {
+		t.Fatalf("active = %q, want %q", active, id2)
+	}
+
+	// delete id2 (attivo) → ripiega sul primo rimanente (id1).
+	rec = httptest.NewRecorder()
+	app.handleDeleteAIProfile(rec, withIDParam(adminReq("DELETE", "/api/ai/profiles/"+id2, ""), id2))
+	if rec.Code != 200 {
+		t.Fatalf("delete: %d", rec.Code)
+	}
+	list, active := app.loadProfiles()
+	if len(list) != 1 || active != id1 {
+		t.Fatalf("after delete: %d profiles active=%q want %q", len(list), active, id1)
+	}
+
+	// delete id inesistente → 404.
+	rec = httptest.NewRecorder()
+	app.handleDeleteAIProfile(rec, withIDParam(adminReq("DELETE", "/api/ai/profiles/zzz", ""), "zzz"))
+	if rec.Code != 404 {
+		t.Errorf("missing delete: status = %d, want 404", rec.Code)
+	}
+
+	// activate id inesistente → 404.
+	rec = httptest.NewRecorder()
+	app.handleActivateAIProfile(rec, withIDParam(adminReq("POST", "/api/ai/profiles/zzz/activate", ""), "zzz"))
+	if rec.Code != 404 {
+		t.Errorf("missing activate: status = %d, want 404", rec.Code)
+	}
+}
