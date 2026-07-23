@@ -729,20 +729,20 @@
 
     function renderScanResults(results) {
         const reachable = results.filter(r => r.reachable);
-        const sshOk     = results.filter(r => r.ssh_ok);
+        const sshOpen   = results.filter(r => r.ssh_open || r.ssh_ok);
         const added     = results.filter(r => r.added);
         document.getElementById('subnetScanStatus').textContent =
             currentLang === 'en'
-                ? `Completed — ${reachable.length} reachable, ${sshOk.length} SSH ok, ${added.length} added to inventory.`
-                : `Completata — ${reachable.length} raggiungibili, ${sshOk.length} SSH ok, ${added.length} aggiunti all'inventario.`;
+                ? `Completed — ${reachable.length} reachable, ${sshOpen.length} SSH open, ${added.length} added to inventory.`
+                : `Completata — ${reachable.length} raggiungibili, ${sshOpen.length} SSH aperta, ${added.length} aggiunti all'inventario.`;
 
-        if (sshOk.length === 0) {
-            const noHostText = currentLang === 'en' ? 'No hosts responding via SSH.' : 'Nessun host risponde via SSH.';
+        if (sshOpen.length === 0) {
+            const noHostText = currentLang === 'en' ? 'No hosts with SSH port open found.' : 'Nessun host trovato con porta SSH aperta.';
             document.getElementById('subnetScanResultsTable').innerHTML =
                 `<div style="padding:14px; color:var(--text-muted); font-size:13px;">${noHostText}</div>`;
             return;
         }
-        const rows = sshOk.map(r => {
+        const rows = sshOpen.map(r => {
             const addText = currentLang === 'en' ? 'Add' : 'Aggiungi';
             const inInventoryText = currentLang === 'en' ? 'In inventory' : 'In inventario';
             const addCell = (!r.added)
@@ -753,19 +753,25 @@
                        ${addText}
                    </button>`
                 : `<span style="color:var(--text-muted); font-size:11px;">${inInventoryText}</span>`;
-            return `<div style="display:grid; grid-template-columns:130px 1fr 56px 24px 90px;
+
+            const sshStatusBadge = r.ssh_ok
+                ? `<span style="color:var(--primary, #3b82f6); font-weight:600;" title="${currentLang==='en'?'SSH Auth OK':'SSH Autenticato'}">✓</span>`
+                : `<span style="color:var(--text-muted); font-size:11px;" title="${currentLang==='en'?'SSH Open (Auth required)':'SSH Aperto (Credenziali da inserire)'}">🔑 Aperto</span>`;
+
+            return `<div style="display:grid; grid-template-columns:130px 1fr 56px 85px 90px;
                         align-items:center; gap:8px; padding:8px 12px;
                         border-bottom:1px solid var(--border); font-size:12px;">
                 <span style="font-family:Menlo,monospace; color:var(--primary);">${escapeHtml(r.ip)}</span>
                 <span>${r.hostname ? escapeHtml(r.hostname) : '<span style="color:var(--text-muted)">—</span>'}</span>
                 <span style="text-transform:uppercase; color:var(--text-muted);">${escapeHtml(r.vendor)}</span>
-                <span style="text-align:center; color:${r.ssh_ok ? 'var(--primary)' : 'var(--danger)'};">${r.ssh_ok ? '✓' : '✗'}</span>
+                <span style="text-align:center;">${sshStatusBadge}</span>
                 ${addCell}
               </div>`;
         }).join('');
         document.getElementById('subnetScanResultsTable').innerHTML = rows;
         if (added.length > 0) appInit();
     }
+
 
     async function addDiscoveredDevice(ip, hostname, vendor, btnEl) {
         const group = document.getElementById('scanGroupSelect').value;

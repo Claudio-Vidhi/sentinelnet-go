@@ -228,17 +228,32 @@ func (a *App) runScan(jobID string, hosts []string, req scanReq) {
 		g.Go(func() error {
 			hctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 			defer cancel()
-			result := map[string]any{"ip": ip, "reachable": false, "ssh_ok": false, "hostname": "", "vendor": req.Vendor, "added": false}
+			result := map[string]any{
+				"ip":        ip,
+				"reachable": false,
+				"ssh_open":  false,
+				"ssh_ok":    false,
+				"hostname":  "",
+				"vendor":    req.Vendor,
+				"added":     false,
+			}
 			if collect.Ping(hctx, ip) {
 				result["reachable"] = true
 			}
-			if res := collect.RunBackupAndTriage(hctx, ip, creds, drv); res.Status == "success" {
+			if collect.ProbeSSHPort(hctx, ip) {
 				result["reachable"] = true
-				result["ssh_ok"] = true
-				result["hostname"] = res.Hostname
-				if req.AutoAdd {
-					if err := a.store.UpsertDeviceForPromotion(ip, strings.ToLower(req.Vendor), req.Group, res.Hostname); err == nil {
-						_ = a.store.UpsertVersion(ip, strings.ToLower(req.Vendor), res.Version, "online")
+				result["ssh_open"] = true
+				if res := collect.RunBackupAndTriage(hctx, ip, creds, drv); res.Status == "success" {
+					result["ssh_ok"] = true
+					result["hostname"] = res.Hostname
+					if req.AutoAdd {
+						if err := a.store.UpsertDeviceForPromotion(ip, strings.ToLower(req.Vendor), req.Group, res.Hostname); err == nil {
+							_ = a.store.UpsertVersion(ip, strings.ToLower(req.Vendor), res.Version, "online")
+							result["added"] = true
+						}
+					}
+				} else if req.AutoAdd {
+					if err := a.store.UpsertDeviceForPromotion(ip, strings.ToLower(req.Vendor), req.Group, ""); err == nil {
 						result["added"] = true
 					}
 				}
@@ -253,6 +268,7 @@ func (a *App) runScan(jobID string, hosts []string, req scanReq) {
 	_ = g.Wait()
 	a.updateJob(jobID, func(j *Job) { j.Status = "done" })
 }
+
 
 func splitLines(s string) []string {
 	var out []string

@@ -34,6 +34,18 @@ func Ping(ctx context.Context, host string) bool {
 	return false
 }
 
+// ProbeSSHPort verifica se la porta SSH (22) di un host è aperta e accetta connessioni.
+func ProbeSSHPort(ctx context.Context, host string) bool {
+	d := net.Dialer{Timeout: 2000 * time.Millisecond}
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, "22"))
+	if err == nil {
+		_ = conn.Close()
+		return true
+	}
+	return false
+}
+
+
 type TriageResult struct {
 	Status     string // success | error
 	Hostname   string
