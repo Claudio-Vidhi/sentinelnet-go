@@ -57,20 +57,45 @@ func (a *App) updateJob(id string, fn func(*Job)) {
 	}
 }
 
-// resolveCreds: credenziali dedicate del device (decifrate) oppure il profilo
-// standard dalla configurazione (profile=default).
+// resolveCreds: risolve le credenziali di un dispositivo.
+// 1. Se d.Profile inizia per "identity:", carica l'identità del tenant e decifra le credenziali.
+// 2. Se d.Profile è "default" o d.Username è vuoto, usa le credenziali globali a.cfg.
+// 3. Altrimenti decifra le credenziali custom del dispositivo.
 func (a *App) resolveCreds(d *store.Device) collect.Credentials {
-	if d.Profile == "default" || d.Username == "" {
-		return collect.Credentials{
-			Username:     a.cfg.DefaultUser,
-			Password:     a.cfg.DefaultPass,
-			EnableSecret: a.cfg.DefaultSecret,
+	if d == nil {
+		return collect.Credentials{}
+	}
+	if strings.HasPrefix(d.Profile, "identity:") {
+		id := strings.TrimPrefix(d.Profile, "identity:")
+		if a.store != nil {
+			if ic, err := a.store.GetIdentityCredentials(id, a.vault); err == nil && ic != nil {
+				return collect.Credentials{
+					Username:     ic.Username,
+					Password:     ic.Password,
+					EnableSecret: ic.Secret,
+				}
+			}
 		}
 	}
-	pass, _ := a.vault.Decrypt(d.PasswordEnc)
-	sec, _ := a.vault.Decrypt(d.EnableSecretEnc)
+	if d.Profile == "default" || d.Username == "" {
+		if a.cfg != nil {
+			return collect.Credentials{
+				Username:     a.cfg.DefaultUser,
+				Password:     a.cfg.DefaultPass,
+				EnableSecret: a.cfg.DefaultSecret,
+			}
+		}
+		return collect.Credentials{}
+	}
+	pass := ""
+	sec := ""
+	if a.vault != nil {
+		pass, _ = a.vault.Decrypt(d.PasswordEnc)
+		sec, _ = a.vault.Decrypt(d.EnableSecretEnc)
+	}
 	return collect.Credentials{Username: d.Username, Password: pass, EnableSecret: sec}
 }
+
 
 // driverFor risolve il driver CLI di un vendor: prima il campo 'driver' del
 // registro vendor, poi il fallback per nome vendor (come resolve_driver del Python).

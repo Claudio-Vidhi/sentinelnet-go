@@ -88,3 +88,34 @@ func TestIdentitiesAPIWorkflow(t *testing.T) {
 		t.Fatalf("DELETE /api/identities/%s code=%d body=%s", id, w.Code, w.Body.String())
 	}
 }
+
+func TestResolveCredsWithIdentity(t *testing.T) {
+	app := identityApp(t)
+
+	passEnc, _ := app.vault.Encrypt("fgpassword")
+	secEnc, _ := app.vault.Encrypt("fgsecret")
+	ident := &store.Identity{
+		ID:          "id-fortigate-123",
+		Name:        "FortiGate Creds",
+		Tenant:      "acme",
+		Username:    "admin_fg",
+		PasswordEnc: passEnc,
+		SecretEnc:   secEnc,
+	}
+	if err := app.store.UpsertIdentity(ident); err != nil {
+		t.Fatalf("UpsertIdentity failed: %v", err)
+	}
+
+	dev := &store.Device{
+		IP:      "192.168.1.99",
+		Vendor:  "fortigate",
+		Tenant:  "acme",
+		Profile: "identity:id-fortigate-123",
+	}
+
+	creds := app.resolveCreds(dev)
+	if creds.Username != "admin_fg" || creds.Password != "fgpassword" || creds.EnableSecret != "fgsecret" {
+		t.Fatalf("resolveCreds failed for identity profile, got %+v", creds)
+	}
+}
+
