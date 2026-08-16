@@ -1,4 +1,4 @@
-package api
+﻿package api
 
 import (
 	"io/fs"
@@ -22,7 +22,7 @@ func (a *App) Router() http.Handler {
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
 
 	// Heartbeat dell'interfaccia (pub): la sua assenza arresta il server quando
-	// autoShutdown è attivo. GET e POST (fetch keepalive / sendBeacon).
+	// autoShutdown Ã¨ attivo. GET e POST (fetch keepalive / sendBeacon).
 	r.Get("/api/heartbeat", a.handleHeartbeat)
 	r.Post("/api/heartbeat", a.handleHeartbeat)
 
@@ -124,7 +124,7 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/fortigate/targets/{ip}/test", a.requireAuth("admin", a.handleFGTTestTarget))
 	r.Put("/api/fortigate/targets/{ip}", a.requireAuth("admin", a.handleFGTUpdateTarget))
 
-	// --- FortiGate: osservabilità (auth read, tenant-scoped via assertDeviceAllowed) ---
+	// --- FortiGate: osservabilitÃ  (auth read, tenant-scoped via assertDeviceAllowed) ---
 	r.Get("/api/fortigate/{ip}/status", a.requireAuth("", a.handleFGTStatus))
 	r.Get("/api/fortigate/{ip}/interfaces", a.requireAuth("", a.handleFGTInterfaces))
 	r.Get("/api/fortigate/{ip}/arp", a.requireAuth("", a.handleFGTARP))
@@ -142,10 +142,10 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/fortigate/{ip}/sessions", a.requireAuth("", a.handleFGTSessions))
 	r.Post("/api/fortigate/{ip}/logs", a.requireAuth("", a.handleFGTLogs))
 	r.Post("/api/fortigate/{ip}/diagnose-client", a.requireAuth("", a.handleFGTDiagnoseClient))
-	// Contiene segreti: richiede 'operator' ed è sempre in audit.
+	// Contiene segreti: richiede 'operator' ed Ã¨ sempre in audit.
 	r.Get("/api/fortigate/{ip}/full-config", a.requireAuth("operator", a.handleFGTFullConfig))
 
-	// --- WLC: osservabilità wireless Cisco (auth read, tenant-scoped via assertDeviceAllowed) ---
+	// --- WLC: osservabilitÃ  wireless Cisco (auth read, tenant-scoped via assertDeviceAllowed) ---
 	r.Get("/api/wlc/{ip}/status", a.requireAuth("", a.handleWLCStatus))
 	r.Get("/api/wlc/{ip}/ap-summary", a.requireAuth("", a.handleWLCAPSummary))
 	r.Get("/api/wlc/{ip}/client-summary", a.requireAuth("", a.handleWLCClientSummary))
@@ -154,6 +154,11 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/wlc/{ip}/rogue-aps", a.requireAuth("", a.handleWLCRogueAPs))
 	r.Get("/api/wlc/{ip}/interfaces", a.requireAuth("", a.handleWLCInterfaces))
 	r.Get("/api/wlc/{ip}/diagnose-client/{mac}", a.requireAuth("", a.handleWLCDiagnoseClient))
+	r.Post("/api/diagnose/client", a.requireAuth("", a.handleDiagnoseClient))
+	r.Get("/api/diagnose/gateway-candidates", a.requireAuth("", a.handleGetGatewayCandidates))
+	r.Post("/api/diagnose/traceroute-gateway", a.requireAuth("", a.handleTracerouteGateway))
+	r.Post("/api/diagnose/port-bounce", a.requireAuth("admin", a.handleDiagnosePortBounce))
+	r.Post("/api/interfaces/state", a.requireAuth("admin", a.handleSetInterfaceState))
 
 	// --- Sedi multi-sito (adm), relay comandi e job (op) ---
 	r.Get("/api/sites", a.requireAuth("admin", a.handleListSites))
@@ -166,8 +171,8 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/command-jobs/{job_id}", a.requireAuth("operator", a.handleGetCommandJob))
 
 	// --- Agenti di sede: autenticazione per token, NON JWT ---
-	// Il contratto di trasporto (header, forme JSON, claim dei job) è
-	// vincolante: gli agenti Python già installati parlano con queste rotte.
+	// Il contratto di trasporto (header, forme JSON, claim dei job) Ã¨
+	// vincolante: gli agenti Python giÃ  installati parlano con queste rotte.
 	r.Post("/api/agent/heartbeat", a.handleAgentHeartbeat)
 	r.Post("/api/agent/inventory", a.handleAgentInventory)
 	r.Post("/api/agent/mac", a.handleAgentMac)
@@ -185,6 +190,31 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/provisioner/fgt/push-ssh", a.requireAuth("operator", a.handleFGTProvisionerPushSSH))
 	r.Post("/api/provisioner/fgt/push-serial", a.requireAuth("operator", a.handleFGTProvisionerPushSerial))
 
+	// --- Incident Management & Correlation Engine ---
+	r.Get("/api/incidents/rules", a.requireAuth("", a.handleListCorrelationRules))
+	r.Post("/api/incidents/rules/{rule_id}/parameters", a.requireAuth("admin", a.handleSetRuleParameters))
+	r.Get("/api/incidents/interfaces", a.requireAuth("", a.handleListInterfaces))
+	r.Post("/api/incidents/interfaces/expected", a.requireAuth("operator", a.handleSetSuppression))
+	r.Get("/api/incidents", a.requireAuth("", a.handleListIncidents))
+	r.Get("/api/incidents/{id}", a.requireAuth("", a.handleGetIncident))
+	r.Post("/api/incidents/{id}/status", a.requireAuth("operator", a.handleSetIncidentStatus))
+	r.Post("/api/incidents/{id}/explain", a.requireAuth("operator", a.handleExplainIncident))
+
+	// --- Redundancy & High Availability ---
+	r.Get("/api/redundancy/groups", a.requireAuth("", a.handleListRedundancyGroups))
+	r.Get("/api/redundancy/groups/{id}", a.requireAuth("", a.handleGetRedundancyGroup))
+	r.Post("/api/redundancy/groups", a.requireAuth("admin", a.handleCreateRedundancyGroup))
+	r.Put("/api/redundancy/groups/{id}", a.requireAuth("admin", a.handleUpdateRedundancyGroup))
+	r.Delete("/api/redundancy/groups/{id}", a.requireAuth("admin", a.handleDeleteRedundancyGroup))
+
+	// --- Flow SIEM (Security Event Logging) ---
+	r.Get("/api/flow-siem/events", a.requireAuth("", a.handleGetFlowSiemEvents))
+	r.Get("/api/flow-siem/histogram", a.requireAuth("", a.handleGetFlowSiemHistogram))
+	r.Get("/api/flow-siem/facets", a.requireAuth("", a.handleGetFlowSiemFacets))
+	r.Post("/api/flow-siem/alerts/suppress", a.requireAuth("operator", a.handleSuppressFlowSiemAlert))
+	r.Post("/api/flow-siem/shun-ip", a.requireAuth("operator", a.handleShunIP))
+	r.Get("/api/flow-siem/shun-list", a.requireAuth("", a.handleGetShunList))
+
 	// --- Observability (Live Flows) ---
 	r.Get("/api/observability/top", a.requireAuth("", a.handleObsTop))
 	r.Get("/api/observability/syslog", a.requireAuth("", a.handleObsSyslog))
@@ -195,6 +225,23 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/observability/config", a.requireAuth("admin", a.handleObsGetConfig))
 	r.Post("/api/observability/config", a.requireAuth("admin", a.handleObsSetConfig))
 	r.Get("/api/observability/health", a.requireAuth("admin", a.handleObsHealth))
+
+	// --- NetSec Audit & Compliance Scanner ---
+	r.Get("/api/netsec-audit/benchmarks", a.requireAuth("", a.handleNetSecAuditBenchmarks))
+	r.Post("/api/netsec-audit/scan", a.requireAuth("", a.handleNetSecAuditScan))
+	r.Get("/api/netsec-audit/history", a.requireAuth("", a.handleNetSecAuditHistory))
+	r.Get("/api/netsec-audit/history/{run_id}", a.requireAuth("", a.handleNetSecAuditHistoryDetail))
+	r.Delete("/api/netsec-audit/history/{run_id}", a.requireAuth("admin", a.handleNetSecAuditHistoryDelete))
+
+	// --- Audit Checklist Framework ---
+	r.Get("/api/audit-checklist/templates", a.requireAuth("", a.handleListAuditTemplates))
+	r.Get("/api/audit-checklist/templates/{template_id}", a.requireAuth("", a.handleGetAuditTemplate))
+	r.Get("/api/audit-checklist/engagements", a.requireAuth("", a.handleListAuditEngagements))
+	r.Post("/api/audit-checklist/engagements", a.requireAuth("operator", a.handleCreateAuditEngagement))
+	r.Get("/api/audit-checklist/engagements/{engagement_id}", a.requireAuth("", a.handleGetAuditEngagement))
+	r.Put("/api/audit-checklist/engagements/{engagement_id}/items/{item_ref}", a.requireAuth("operator", a.handleUpdateAuditItemAssessment))
+	r.Post("/api/audit-checklist/engagements/{engagement_id}/evidence", a.requireAuth("operator", a.handleAddAuditEvidence))
+	r.Get("/api/audit-checklist/engagements/{engagement_id}/report", a.requireAuth("", a.handleGetAuditReport))
 
 	// --- Config Analyzer (auth read, tenant-scoped) ---
 	r.Get("/api/config-analyzer", a.requireAuth("", a.handleConfigAnalyzerAll))
@@ -223,7 +270,7 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/ai/chat", a.requireAuth("", a.handleAIChat))
 	r.Post("/api/ai/generate-config", a.requireAuth("", a.handleAIGenerateConfig))
 
-	// --- Identità credenziali (auth read, operator write) ---
+	// --- IdentitÃ  credenziali (auth read, operator write) ---
 	r.Get("/api/identities", a.requireAuth("", a.handleListIdentities))
 	r.Post("/api/identities", a.requireAuth("operator", a.handleCreateIdentity))
 	r.Put("/api/identities/{id}", a.requireAuth("operator", a.handleUpdateIdentity))
@@ -259,3 +306,12 @@ func (a *App) serveDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
 }
+
+
+
+
+
+
+
+
+

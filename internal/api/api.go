@@ -1,5 +1,5 @@
-// Package api: router HTTP, middleware (auth/RBAC/tenant scoping) e handler,
-// con contratti JSON identici all'app FastAPI così il dashboard.html gira invariato.
+﻿// Package api: router HTTP, middleware (auth/RBAC/tenant scoping) e handler,
+// con contratti JSON identici all'app FastAPI cosi la dashboard gira invariata.
 package api
 
 import (
@@ -14,6 +14,7 @@ import (
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/crypto"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/observability"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/obsstore"
+	"github.com/Claudio-Vidhi/sentinelnet-go/internal/pingmon"
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/store"
 )
 
@@ -23,10 +24,12 @@ type App struct {
 	auth  *auth.Service
 	vault *crypto.Vault
 
-	// Pipeline di osservabilità. Opzionale: se non collegata, gli handler
-	// /api/observability/* rispondono 503 invece di andare in panic.
+	// Pipeline di osservabilita. Opzionale.
 	obs    *obsstore.Store
 	obsMgr *observability.Manager
+
+	// Monitor ping continuo inventario.
+	pingMon *pingmon.Monitor
 
 	// Job asincroni (triage / bulk-command / scan-subnet).
 	jobsMu sync.Mutex
@@ -36,34 +39,28 @@ type App struct {
 	triageMu     sync.Mutex
 	triageStatus TriageStatus
 
-	// Ciclo di vita legato all'interfaccia: la pagina invia un heartbeat; alla
-	// sua chiusura il server si arresta e libera la porta (vedi lifecycle.go).
-	lastBeat     atomic.Int64 // unix nano dell'ultimo heartbeat
+	// Ciclo di vita legato all'interfaccia.
+	lastBeat     atomic.Int64
 	autoShutdown atomic.Bool
 	onShutdown   func()
 	shutdownOnce sync.Once
 }
 
 func NewApp(cfg *config.Config, st *store.Store, authSvc *auth.Service, vault *crypto.Vault) *App {
-	return &App{
+	app := &App{
 		cfg:   cfg,
 		store: st,
 		auth:  authSvc,
 		vault: vault,
 		jobs:  map[string]*Job{},
 	}
+	app.pingMon = pingmon.New(st, app.auditLog)
+	return app
 }
 
-// EnableObservability collega la pipeline di osservabilità e ne ritorna il
-// manager (per lo shutdown). Separata dal costruttore perché è opzionale:
-// senza, il resto dell'applicazione funziona e gli endpoint rispondono 503.
-//
-// Il manager viene costruito qui, e non dal chiamante, per non dover esporre
-// il logger di audit fuori dal package.
+// EnableObservability collega la pipeline di osservabilita e ne ritorna il manager.
 func (a *App) EnableObservability(obs *obsstore.Store) *observability.Manager {
 	mgr := observability.NewManager(obs, a.store, a.auditLog)
-	// Il poller REST ha bisogno dei token, cifrati nel vault: gli si passa la
-	// fabbrica di client, non le credenziali.
 	mgr.SetClientFunc(a.fgtClient)
 	a.obs, a.obsMgr = obs, mgr
 	return mgr
@@ -88,7 +85,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-// Errori nello stile FastAPI: {"detail": "..."} così la UI mostra err.detail.
+// Errori nello stile FastAPI: {"detail": "..."}.
 func writeErr(w http.ResponseWriter, status int, detail string) {
 	writeJSON(w, status, map[string]string{"detail": detail})
 }
