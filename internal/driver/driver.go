@@ -1,4 +1,4 @@
-// Package driver: astrazione per-vendor dei comandi CLI (versione, backup, ARP).
+﻿// Package driver: astrazione per-vendor dei comandi CLI (versione, backup, ARP).
 // Porta di drivers/*.py + DRIVER_REGISTRY/VENDOR_DRIVER_DEFAULTS di core/core_engine.py.
 //
 // Le regex sono replicate alla lettera dai driver Python: NON vanno "migliorate",
@@ -8,7 +8,7 @@ package driver
 
 import "strings"
 
-// Runner è la porzione di sessione CLI usata dai driver. Volutamente minimale:
+// Runner Ã¨ la porzione di sessione CLI usata dai driver. Volutamente minimale:
 // evita che questo package importi internal/collect (che a sua volta importa
 // questo package in triage.go) creando un ciclo. *collect.Session la soddisfa.
 type Runner interface {
@@ -19,13 +19,13 @@ type Driver interface {
 	// GetVersion esegue il comando di versione e ne estrae la versione,
 	// oppure "Unknown" se il pattern non corrisponde.
 	GetVersion(r Runner) string
-	// BackupCommand è il comando la cui uscita costituisce il backup.
+	// BackupCommand Ã¨ il comando la cui uscita costituisce il backup.
 	BackupCommand() string
-	// ARPCommand è il comando per la tabella ARP.
+	// ARPCommand Ã¨ il comando per la tabella ARP.
 	ARPCommand() string
 }
 
-// registry: nome-driver → implementazione. Corrisponde a DRIVER_REGISTRY.
+// registry: nome-driver â†’ implementazione. Corrisponde a DRIVER_REGISTRY.
 // cisco_9800 (Catalyst 9800, IOS-XE) usa gli stessi comandi di cisco_ios,
 // esattamente come nel Python.
 var registry = map[string]Driver{
@@ -40,7 +40,7 @@ var registry = map[string]Driver{
 	"cisco_9800":     CiscoIOS{},
 }
 
-// vendorDefaults: fallback nome-vendor → nome-driver, usato quando il registro
+// vendorDefaults: fallback nome-vendor â†’ nome-driver, usato quando il registro
 // vendor non specifica un driver. Corrisponde a VENDOR_DRIVER_DEFAULTS.
 var vendorDefaults = map[string]string{
 	"cisco":      "cisco_ios",
@@ -57,7 +57,18 @@ var vendorDefaults = map[string]string{
 
 // Resolve risolve un vendor nel driver corrispondente, con lo stesso ordine del
 // Python: prima il campo 'driver' del registro vendor, poi il fallback per nome
-// vendor. driverName può essere "" quando il registro non lo specifica.
+// vendor. driverName puÃ² essere "" quando il registro non lo specifica.
+// DriverName ritorna il nome del driver corrispondente per un vendor.
+func DriverName(vendor, driverName string) string {
+	if driverName == "" {
+		driverName = vendorDefaults[normalize(vendor)]
+	}
+	if driverName == "" {
+		driverName = normalize(vendor)
+	}
+	return driverName
+}
+
 func Resolve(vendor, driverName string) (Driver, bool) {
 	if driverName == "" {
 		driverName = vendorDefaults[normalize(vendor)]
@@ -66,7 +77,7 @@ func Resolve(vendor, driverName string) (Driver, bool) {
 	return d, ok
 }
 
-// ResolveOrDefault è come Resolve ma ricade su cisco_ios per i vendor non
+// ResolveOrDefault Ã¨ come Resolve ma ricade su cisco_ios per i vendor non
 // riconosciuti, preservando il comportamento storico del port Go (che inviava
 // comandi IOS a qualsiasi apparato).
 func ResolveOrDefault(vendor, driverName string) Driver {
@@ -87,3 +98,4 @@ func IsFortinet(vendor string) bool {
 }
 
 func normalize(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
+
