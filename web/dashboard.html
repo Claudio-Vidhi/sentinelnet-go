@@ -171,26 +171,43 @@
           <span class="nav-left" data-i18n="tabClientMap"><i class="fa-solid fa-map-pin"></i> Client Map (MAC &#8596; IP)</span>
           <span class="preview-badge">preview</span>
         </button>
+        <button class="nav-item" onclick="openClientDiagModal()">
+          <span class="nav-left" data-i18n="tabClientDiag"><i class="fa-solid fa-stethoscope"></i> Diagnosi Client 360°</span>
+        </button>
+      </div>
+      <div class="nav-group"><h3 data-i18n="navSecurity">Security &amp; SIEM</h3>
+        <button class="nav-item" onclick="switchTab('tab-incidents', this)">
+          <span class="nav-left" data-i18n="tabIncidents"><i class="fa-solid fa-bell-exclamation"></i> Incidenti &amp; Correlazione</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-flow-siem', this)">
+          <span class="nav-left" data-i18n="tabFlowSiem"><i class="fa-solid fa-shield-virus"></i> Flow SIEM &amp; Threat Defense</span>
+        </button>
         <button class="nav-item" onclick="switchTab('tab-flows', this); flowsTabShown();">
           <span class="nav-left" data-i18n="tabFlows"><i class="fa-solid fa-wave-square"></i> Flussi Live</span>
           <span class="preview-badge">preview</span>
         </button>
+        <button class="nav-item" onclick="switchTab('tab-security', this)">
+          <span class="nav-left" data-i18n="tabSecurity"><i class="fa-solid fa-shield-halved"></i> Threat Intel (EUVD)</span>
+        </button>
       </div>
-      <div class="nav-group"><h3 data-i18n="navAnalysis">Analysis</h3>
+      <div class="nav-group"><h3 data-i18n="navAnalysis">Analysis &amp; Audit</h3>
         <button class="nav-item" onclick="switchTab('tab-map', this)">
           <span class="nav-left" data-i18n="tabMap"><i class="fa-solid fa-link"></i> Port-Channel &amp; Link</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-map-interactive', this)">
           <span class="nav-left" data-i18n="tabInteractive"><i class="fa-solid fa-circle-nodes"></i> Mappa Topologia 2D</span>
         </button>
-        <button class="nav-item" onclick="switchTab('tab-categories', this)">
-          <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Dispositivi &amp; Categorie</span>
-        </button>
-        <button class="nav-item" onclick="switchTab('tab-security', this)">
-          <span class="nav-left" data-i18n="tabSecurity"><i class="fa-solid fa-shield-virus"></i> Threat Intel (EUVD)</span>
+        <button class="nav-item" onclick="switchTab('tab-redundancy', this)">
+          <span class="nav-left" data-i18n="tabRedundancy"><i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-config', this)">
           <span class="nav-left" data-i18n="tabConfigAnalyzer"><i class="fa-solid fa-file-code"></i> Config Analyzer</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-netsec-audit', this)">
+          <span class="nav-left" data-i18n="tabNetSecAudit"><i class="fa-solid fa-clipboard-check"></i> NetSec Audit &amp; Conformità</span>
+        </button>
+        <button class="nav-item" onclick="switchTab('tab-categories', this)">
+          <span class="nav-left" data-i18n="tabCategories"><i class="fa-solid fa-shapes"></i> Categorie</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-ai', this)">
           <span class="nav-left" data-i18n="tabAiAssistant"><i class="fa-solid fa-robot"></i> AI Assistant</span>
@@ -207,7 +224,7 @@
           <span class="nav-left" data-i18n="tabImport"><i class="fa-solid fa-file-csv"></i> Importazione CSV</span>
         </button>
         <button class="nav-item" onclick="switchTab('tab-groups', this)">
-          <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Gestione Gruppi/Sedi</span>
+          <span class="nav-left" data-i18n="tabGroups"><i class="fa-solid fa-folder-open"></i> Gestione Tenant</span>
         </button>
       </div>
       <div class="nav-group"><h3 data-i18n="navAdmin">Administration</h3>
@@ -1328,6 +1345,310 @@
       <div id="flowDetailPanelBody"></div>
     </div>
 
+    <!-- TAB: Incident Management & Correlation Engine -->
+    <div id="tab-incidents" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow"><i class="fa-solid fa-bell-exclamation"></i> Security &amp; Correlation</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;">Incident Management &amp; Correlazione</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:72ch;">
+            Motore di correlazione intelligente multi-evento: analisi root-cause assistita da AI, rilevamento loop e flapping, anomalie di traffico e soppressione finestre di manutenzione.
+          </p>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px;">
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase;">Incidenti Totali</h4>
+          <strong id="incKpiTotal" style="font-size:22px;">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--danger);">Critici</h4>
+          <strong id="incKpiCritical" style="font-size:22px; color:var(--danger);">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--warning);">Alta Severità</h4>
+          <strong id="incKpiHigh" style="font-size:22px; color:var(--warning);">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase;">Attenzione / Info</h4>
+          <strong id="incKpiWarning" style="font-size:22px;">0</strong>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <div class="subnav-pills" style="margin-bottom:12px;">
+          <button class="subnav-btn inc-subnav-btn active" data-subtab="active" onclick="switchIncidentSubTab('active')"><i class="fa-solid fa-list"></i> Incidenti Attivi</button>
+          <button class="subnav-btn inc-subnav-btn" data-subtab="rules" onclick="switchIncidentSubTab('rules')"><i class="fa-solid fa-sliders"></i> Regole di Correlazione</button>
+          <button class="subnav-btn inc-subnav-btn" data-subtab="suppression" onclick="switchIncidentSubTab('suppression')"><i class="fa-solid fa-eye-slash"></i> Soppressioni Interfacce</button>
+        </div>
+
+        <div id="incSubViewActive">
+          <div class="filterbar" style="margin-top:0; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+            <div style="display:flex; gap:10px; align-items:center;">
+              <select id="incStatusFilter" onchange="loadIncidentsList()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+                <option value="new">Nuovi</option>
+                <option value="acknowledged">In carico</option>
+                <option value="resolved">Risolti</option>
+                <option value="all">Tutti</option>
+              </select>
+              <select id="incWindowFilter" onchange="loadIncidentsList()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+                <option value="1h">Ultima ora</option>
+                <option value="24h" selected>Ultime 24 ore</option>
+                <option value="7d">Ultimi 7 giorni</option>
+                <option value="30d">Ultimi 30 giorni</option>
+              </select>
+            </div>
+            <button class="btn btn-secondary btn-small" onclick="loadIncidentsList()" style="width:auto;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+          </div>
+          <div class="table-wrap" style="max-height:480px; margin-top:10px;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th>Quando</th>
+                  <th>Titolo / Regola</th>
+                  <th>Severità</th>
+                  <th>Tenant</th>
+                  <th>Dispositivo Target</th>
+                  <th>Stato</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="incidentsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="incSubViewRules" style="display:none;">
+          <div id="incRulesContainer"></div>
+        </div>
+
+        <div id="incSubViewSuppression" style="display:none;">
+          <div class="table-wrap" style="max-height:480px;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th>Hostname</th>
+                  <th>IP Apparato</th>
+                  <th>Interfaccia</th>
+                  <th>Tenant</th>
+                  <th>Stato Flapping</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="incSuppressionTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: Flow SIEM & Active Threat Defense -->
+    <div id="tab-flow-siem" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow"><i class="fa-solid fa-shield-virus"></i> Security Operations Center</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;">Flow SIEM &amp; Active Threat Defense</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:74ch;">
+            Analisi in tempo reale degli eventi di sicurezza firewall (DENY/DROP/THREAT), istogramma volumetrico, facets aggregati delle minacce e blocco attivo (Shun IP) perimetrale.
+          </p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:18px;">
+        <h4 style="margin:0 0 10px; font-size:13px; text-transform:uppercase; color:var(--text-muted);"><i class="fa-solid fa-chart-column"></i> Volume Eventi di Sicurezza (Traffico Totale vs Blocchi/Deny)</h4>
+        <div class="siem-hist-container" id="siemHistogramBars"></div>
+      </div>
+
+      <div class="panel">
+        <div class="subnav-pills" style="margin-bottom:12px;">
+          <button class="subnav-btn siem-subnav-btn active" data-subtab="events" onclick="switchSiemSubTab('events')"><i class="fa-solid fa-list-ul"></i> Log Eventi di Sicurezza</button>
+          <button class="subnav-btn siem-subnav-btn" data-subtab="facets" onclick="switchSiemSubTab('facets')"><i class="fa-solid fa-chart-pie"></i> Analisi Facets &amp; Top Attackers</button>
+          <button class="subnav-btn siem-subnav-btn" data-subtab="shun" onclick="switchSiemSubTab('shun')"><i class="fa-solid fa-ban" style="color:var(--danger);"></i> Shun List (IP Bloccati)</button>
+        </div>
+
+        <div id="siemSubViewEvents">
+          <div class="filterbar" style="margin-top:0; align-items:center; flex-wrap:wrap; gap:10px;">
+            <select id="siemWindowSelect" onchange="loadFlowSiemTab()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+              <option value="15m">Ultimi 15m</option>
+              <option value="1h">Ultima ora</option>
+              <option value="24h" selected>Ultime 24 ore</option>
+              <option value="7d">Ultimi 7 giorni</option>
+            </select>
+            <select id="siemActionFilter" onchange="loadSiemEvents()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+              <option value="">Tutte le azioni</option>
+              <option value="deny">Solo DENY / DROP</option>
+              <option value="accept">Solo ACCEPT</option>
+            </select>
+            <select id="siemTenantSelect" onchange="loadFlowSiemTab()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px;">
+              <option value="all">Tutti i tenant</option>
+            </select>
+            <input type="text" id="siemSearchInput" placeholder="Cerca IP, minaccia, porta..." oninput="loadSiemEvents()" style="padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:13px; flex:1; min-width:180px;">
+            <button class="btn btn-secondary btn-small" onclick="loadFlowSiemTab()" style="width:auto;"><i class="fa-solid fa-rotate"></i> Aggiorna</button>
+          </div>
+          <div class="table-wrap" style="max-height:480px; margin-top:10px;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th>Orario</th>
+                  <th>Azione</th>
+                  <th>Sorgente</th>
+                  <th>Destinazione</th>
+                  <th>Protocollo</th>
+                  <th>Minaccia</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="siemEventsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="siemSubViewFacets" style="display:none;">
+          <div id="siemFacetsContainer"></div>
+        </div>
+
+        <div id="siemSubViewShun" style="display:none;">
+          <div class="table-wrap" style="max-height:480px;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th>IP Bloccato</th>
+                  <th>Motivo / Regola</th>
+                  <th>Autore</th>
+                  <th>Data Inizio</th>
+                  <th>Stato</th>
+                </tr>
+              </thead>
+              <tbody id="siemShunTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: High Availability & Redundancy Groups -->
+    <div id="tab-redundancy" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow"><i class="fa-solid fa-layer-group"></i> Resilienza &amp; Clustering</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;">Alta Affidabilità (HA) &amp; Gruppi di Ridondanza</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:74ch;">
+            Monitoraggio in tempo reale della salute dei cluster e protocolli di failover: HSRP, VRRP, FortiGate HA, Cisco StackWise e coppie VPC/MLAG per prevenire scenari di split-brain.
+          </p>
+        </div>
+      </div>
+
+      <div class="kpi-grid" style="grid-template-columns:repeat(4,minmax(0,1fr)); margin-bottom:18px;">
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase;">Cluster Totali</h4>
+          <strong id="haKpiTotal" style="font-size:22px;">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--success);">In Salute (Healthy)</h4>
+          <strong id="haKpiHealthy" style="font-size:22px; color:var(--success);">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--warning);">Degradati</h4>
+          <strong id="haKpiDegraded" style="font-size:22px; color:var(--warning);">0</strong>
+        </div>
+        <div class="kpi">
+          <h4 style="font-size:11px; text-transform:uppercase; color:var(--danger);">Critici / Split-Brain</h4>
+          <strong id="haKpiCritical" style="font-size:22px; color:var(--danger);">0</strong>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-server"></i> Gruppi di Ridondanza Attivi</h3>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-primary btn-small requires-admin" onclick="openCreateRedundancyModal()" style="width:auto;">
+            <i class="fa-solid fa-plus"></i> Nuovo Gruppo HA
+          </button>
+          <button class="btn btn-secondary btn-small" onclick="loadRedundancyTab()" style="width:auto;">
+            <i class="fa-solid fa-rotate"></i> Aggiorna
+          </button>
+        </div>
+      </div>
+      <div id="redundancyGroupsContainer"></div>
+    </div>
+
+    <!-- TAB: NetSec Audit & Compliance Scanner -->
+    <div id="tab-netsec-audit" class="tab-content">
+      <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
+        <div class="hero-card">
+          <span class="eyebrow"><i class="fa-solid fa-clipboard-check"></i> Security Posture &amp; Audit</span>
+          <h2 style="margin:0 0 10px; font-family:var(--font-display); font-size:26px; letter-spacing:-.03em;">NetSec Audit &amp; Conformità</h2>
+          <p style="margin:0; color:var(--text-muted); font-size:14px; line-height:1.55; max-width:74ch;">
+            Scansione automatica delle configurazioni contro benchmark di settore (CIS Benchmarks, NIST, Cyber Hygiene) ed engagement framework per audit di sicurezza multi-standard (ISO 27001, PCI-DSS, NIS2).
+          </p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="subnav-pills" style="margin-bottom:12px;">
+          <button class="subnav-btn netsec-subnav-btn active" data-subtab="scanner" onclick="switchNetsecSubTab('scanner')"><i class="fa-solid fa-shield-halved"></i> Scanner di Conformità</button>
+          <button class="subnav-btn netsec-subnav-btn" data-subtab="history" onclick="switchNetsecSubTab('history')"><i class="fa-solid fa-clock-rotate-left"></i> Storico Scansioni</button>
+          <button class="subnav-btn netsec-subnav-btn" data-subtab="checklist" onclick="switchNetsecSubTab('checklist')"><i class="fa-solid fa-clipboard-list"></i> Checklist Engagement Framework</button>
+        </div>
+
+        <div id="netsecSubViewScanner">
+          <div class="panel" style="background:var(--surface-2); margin-bottom:16px;">
+            <h4 style="margin:0 0 12px; font-size:14px;"><i class="fa-solid fa-sliders"></i> Parametri Scansione</h4>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; align-items:flex-end;">
+              <div class="form-group" style="margin:0;">
+                <label>Dispositivo Target</label>
+                <select id="auditDeviceSelect" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="" disabled selected>-- Seleziona apparato --</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Benchmark di Sicurezza</label>
+                <select id="auditBenchmarkSelect" style="padding:8px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:13px;">
+                  <option value="cis_ios_l1">CIS Cisco IOS Level 1</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;">
+                <label>Nome Scansione (Opzionale)</label>
+                <input type="text" id="auditRunName" placeholder="es. Audit Trimestrale Switch Core" style="padding-left:12px;">
+              </div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <label style="font-size:12px; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; gap:6px;">
+                  <input type="checkbox" id="auditSaveRun" checked> Salva nello storico
+                </label>
+                <button class="btn btn-primary" id="btnRunAuditScan" onclick="runNetSecAuditScan()" style="width:auto; margin:0;">
+                  <i class="fa-solid fa-shield-halved"></i> Esegui Scansione
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="auditScanResults" style="display:none;"></div>
+        </div>
+
+        <div id="netsecSubViewHistory" style="display:none;">
+          <div class="table-wrap" style="max-height:480px;">
+            <table style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th>Data Scansione</th>
+                  <th>Nome Audit</th>
+                  <th>Dispositivo</th>
+                  <th>Benchmark</th>
+                  <th>Score</th>
+                  <th>Operatore</th>
+                  <th>Azioni</th>
+                </tr>
+              </thead>
+              <tbody id="auditHistoryTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="netsecSubViewChecklist" style="display:none;">
+          <div id="checklistEngagementsContainer"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="tab-config" class="tab-content">
       <div class="hero" style="grid-template-columns:1fr; margin-bottom:18px;">
         <div class="hero-card">
@@ -2442,19 +2763,101 @@
     </div>
   </div>
 
-  <script src="/static/js/i18n.js"></script>
-  <script src="/static/js/core.js"></script>
-  <script src="/static/js/config-analyzer.js"></script>
-  <script src="/static/js/observability.js"></script>
-  <script src="/static/js/threat-intel.js"></script>
-  <script src="/static/js/provisioning.js"></script>
-  <script src="/static/js/devices.js"></script>
-  <script src="/static/js/topology.js"></script>
-  <script src="/static/js/client-map.js"></script>
-  <script src="/static/js/ai.js"></script>
-  <script src="/static/js/settings.js"></script>
-  <script src="/static/js/mcp-client.js"></script>
-  <script src="/static/js/fortigate-preview.js"></script>
+  <!-- Incident Detail Modal -->
+  <div class="modal-overlay" id="incidentDetailModal" onclick="if(event.target===this)closeIncidentModal()">
+    <div class="modal" style="width: 760px; max-width: 96%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-bell-exclamation" style="color:var(--primary);"></i> Dettaglio &amp; Analisi Incidente</h3>
+        <span class="modal-close" onclick="closeIncidentModal()"><i class="fa-solid fa-xmark"></i></span>
+      </div>
+      <div id="incidentDetailContent" style="max-height:75vh; overflow-y:auto; padding-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- Create Redundancy Group Modal -->
+  <div class="modal-overlay" id="createRedundancyModal" onclick="if(event.target===this)closeCreateRedundancyModal()">
+    <div class="modal" style="width: 520px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-layer-group" style="color:var(--primary);"></i> Crea Gruppo di Ridondanza / HA</h3>
+        <span class="modal-close" onclick="closeCreateRedundancyModal()"><i class="fa-solid fa-xmark"></i></span>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Nome Gruppo</label>
+        <input type="text" id="haGroupName" placeholder="es. Core-HSRP-VLAN10" style="padding-left:12px;">
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Protocollo / Tipo HA</label>
+        <select id="haProtocol" style="padding-left:12px;">
+          <option value="HSRP">Cisco HSRP</option>
+          <option value="VRRP">VRRP v2/v3</option>
+          <option value="FortiGate-FGCP">FortiGate HA (FGCP)</option>
+          <option value="StackWise">Cisco StackWise</option>
+          <option value="VPC">Cisco vPC / MLAG</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Virtual IP (VIP / Gateway Condiviso)</label>
+        <input type="text" id="haVirtualIp" placeholder="es. 192.168.10.1" style="padding-left:12px;">
+      </div>
+      <div class="form-group" style="margin-bottom:18px;">
+        <label>Tenant</label>
+        <input type="text" id="haTenant" value="default" style="padding-left:12px;">
+      </div>
+      <button class="btn btn-primary" onclick="submitCreateRedundancyGroup()" style="background:var(--cta); color:var(--cta-text);">
+        <i class="fa-solid fa-plus"></i> Crea Gruppo
+      </button>
+    </div>
+  </div>
+
+  <!-- Create Audit Engagement Modal -->
+  <div class="modal-overlay" id="createEngagementModal" onclick="if(event.target===this)closeCreateEngagementModal()">
+    <div class="modal" style="width: 520px; max-width: 95%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-clipboard-plus" style="color:var(--primary);"></i> Nuovo Engagement di Audit</h3>
+        <span class="modal-close" onclick="closeCreateEngagementModal()"><i class="fa-solid fa-xmark"></i></span>
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Cliente / Organizzazione</label>
+        <input type="text" id="engCustomer" placeholder="es. Acme Corp HQ" style="padding-left:12px;">
+      </div>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Tenant</label>
+        <input type="text" id="engTenant" value="default" style="padding-left:12px;">
+      </div>
+      <div class="form-group" style="margin-bottom:18px;">
+        <label>Note e Obiettivi dell'Assessment</label>
+        <textarea id="engNotes" rows="3" placeholder="Note sullo scope, intervistati o requisiti speciali..." style="width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:12px; resize:vertical;"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="submitCreateEngagement()" style="background:var(--cta); color:var(--cta-text);">
+        <i class="fa-solid fa-check"></i> Avvia Engagement
+      </button>
+    </div>
+  </div>
+
+  <!-- Client 360 Diagnostics Modal -->
+  <div class="modal-overlay" id="clientDiagModal" onclick="if(event.target===this)closeClientDiagModal()">
+    <div class="modal" style="width: 780px; max-width: 96%;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-stethoscope" style="color:var(--primary);"></i> Diagnosi Client 360° &amp; Risoluzione Problemi</h3>
+        <span class="modal-close" onclick="closeClientDiagModal()"><i class="fa-solid fa-xmark"></i></span>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr auto; gap:10px; align-items:flex-end; margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:14px;">
+        <div class="form-group" style="margin:0;">
+          <label>Target Client (IP o Indirizzo MAC)</label>
+          <input type="text" id="diagClientTarget" placeholder="es. 192.168.1.105 oppure 00:1A:2B:3C:4D:5E" style="padding-left:12px;">
+        </div>
+        <div class="form-group" style="margin:0;">
+          <label>Destinazione di Test (Opzionale)</label>
+          <input type="text" id="diagDestTarget" placeholder="es. 8.8.8.8" style="padding-left:12px;">
+        </div>
+        <button class="btn btn-primary" id="btnRunClientDiag" onclick="runClient360Diagnosis()" style="margin:0; width:auto;">
+          <i class="fa-solid fa-play"></i> Diagnostica
+        </button>
+      </div>
+      <div id="diagResultsContainer" style="max-height:65vh; overflow-y:auto;"></div>
+    </div>
+  </div>
+
   <script>
     // --- SIDEBAR RAIL (collasso a icone) --- [MOVED to static/js/core.js: syncNavTooltips,
     // applySidebarCollapsed, toggleSidebar, escapeHtml, apiFetch, auth handlers, appInit,
@@ -2828,6 +3231,11 @@
   <script src="/static/js/devices.js"></script>
   <script src="/static/js/topology.js"></script>
   <script src="/static/js/client-map.js"></script>
+  <script src="/static/js/clientdiag.js"></script>
+  <script src="/static/js/incidents.js"></script>
+  <script src="/static/js/flow-siem.js"></script>
+  <script src="/static/js/redundancy.js"></script>
+  <script src="/static/js/netsec-audit.js"></script>
   <script src="/static/js/config-analyzer.js"></script>
   <script src="/static/js/threat-intel.js"></script>
   <script src="/static/js/observability.js"></script>

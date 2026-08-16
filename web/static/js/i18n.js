@@ -77,7 +77,8 @@
 
         // Sidebar nav groups
         navOps: "Operazioni",
-        navAnalysis: "Analisi",
+        navSecurity: "Security & SIEM",
+        navAnalysis: "Analisi & Audit",
         navProvisioning: "Provisioning",
         navAdmin: "Amministrazione",
 
@@ -85,6 +86,11 @@
         tabHome: '<i class="fa-solid fa-grid-2"></i> Home',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Gestione Tenant',
+        tabIncidents: '<i class="fa-solid fa-bell-exclamation"></i> Incidenti & Correlazione',
+        tabFlowSiem: '<i class="fa-solid fa-shield-virus"></i> Flow SIEM & Threat Defense',
+        tabRedundancy: '<i class="fa-solid fa-layer-group"></i> Alta Affidabilità (HA)',
+        tabNetSecAudit: '<i class="fa-solid fa-clipboard-check"></i> NetSec Audit & Conformità',
+        tabClientDiag: '<i class="fa-solid fa-stethoscope"></i> Diagnosi Client 360°',
         // Operations Home
         homeEyebrow: '<i class="fa-solid fa-grip"></i> Operazioni',
         homeTitle: "Panoramica operativa",
@@ -973,7 +979,8 @@
 
         // Sidebar nav groups
         navOps: "Operations",
-        navAnalysis: "Analysis",
+        navSecurity: "Security & SIEM",
+        navAnalysis: "Analysis & Audit",
         navProvisioning: "Provisioning",
         navAdmin: "Administration",
 
@@ -981,6 +988,11 @@
         tabHome: '<i class="fa-solid fa-grid-2"></i> Home',
         tabInventory: '<i class="fa-solid fa-list-check"></i> Network Inventory',
         tabGroups: '<i class="fa-solid fa-folder-open"></i> Manage Tenants',
+        tabIncidents: '<i class="fa-solid fa-bell-exclamation"></i> Incidents & Correlation',
+        tabFlowSiem: '<i class="fa-solid fa-shield-virus"></i> Flow SIEM & Threat Defense',
+        tabRedundancy: '<i class="fa-solid fa-layer-group"></i> High Availability (HA)',
+        tabNetSecAudit: '<i class="fa-solid fa-clipboard-check"></i> NetSec Audit & Compliance',
+        tabClientDiag: '<i class="fa-solid fa-stethoscope"></i> Client 360 Diagnostics',
         // Operations Home
         homeEyebrow: '<i class="fa-solid fa-grip"></i> Operations',
         homeTitle: "Operations overview",

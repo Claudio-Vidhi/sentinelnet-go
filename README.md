@@ -6,6 +6,11 @@ SQLite puro-Go (nessun CGO), frontend `dashboard.html` embeddato e servito as-is
 ## Avvio
 
 ```bash
+# Windows (PowerShell / Prompt dei comandi):
+.\run.ps1          # oppure .\run.bat
+go run ./cmd/sentinelnet
+
+# Linux / macOS / WSL (con make installato):
 make run          # go run ./cmd/sentinelnet   → http://localhost:8000
 make build        # binario statico ./sentinelnet
 make test

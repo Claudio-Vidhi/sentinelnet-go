@@ -494,6 +494,10 @@ function switchTab(tabId, clickedBtn) {
     }
     else if(tabId === 'tab-mac') loadMacTracker();
     else if(tabId === 'tab-config') loadConfigAnalyzer();
+    else if(tabId === 'tab-incidents') loadIncidentsTab();
+    else if(tabId === 'tab-flow-siem') loadFlowSiemTab();
+    else if(tabId === 'tab-redundancy') loadRedundancyTab();
+    else if(tabId === 'tab-netsec-audit') loadNetSecAuditTab();
     else if(tabId === 'tab-ai') loadAiTab();
     else if(tabId === 'tab-users') loadUsers();
     else if(tabId === 'tab-sites') loadSites();
