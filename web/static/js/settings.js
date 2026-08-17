@@ -20,12 +20,25 @@
                 : '<span class="status ok"><span class="led led-success"></span>CENTRAL POLL</span>';
             const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : '—';
             const subnets = (s.subnets || []).map(escapeHtml).join(', ') || '—';
+            // Solo una sede con agente puo' essere offline: il central poll non
+            // ha un processo remoto che riporta heartbeat. Soglia legata
+            // all'intervallo configurato dell'agente, non fissa: con un
+            // intervallo lungo un agente sano risulterebbe sempre offline.
+            let statusCell = '<span style="color:var(--text-muted);">—</span>';
+            if (s.mode === 'agent') {
+                const staleAfter = Math.max(120, (s.interval || 60) * 2);
+                const online = s.last_seen && (Date.now() / 1000 - s.last_seen) < staleAfter;
+                statusCell = online
+                    ? `<span class="status ok"><span class="led led-success"></span>${L.lblAgentOnline}</span>`
+                    : `<span class="status bad"><span class="led led-danger"></span>${L.lblAgentOffline}</span>`;
+            }
             let actions = '';
             if (s.mode === 'agent') {
-                actions += `<button data-s="${escapeHtml(s.id)}" onclick="regenSiteToken(this.dataset.s)" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
+                actions += `<button data-action="open-agent-control" data-site-id="${escapeHtml(s.id)}" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
+                actions += `<button data-action="regen-site-token" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
             }
             if (!isCentral) {
-                actions += `<button data-s="${escapeHtml(s.id)}" onclick="deleteSite(this.dataset.s)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
+                actions += `<button data-action="delete-site" data-site-id="${escapeHtml(s.id)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
             } else {
                 actions = `<span class="chip">${L.lblSiteDefault}</span>`;
             }
@@ -33,6 +46,7 @@
                 <td><strong>${escapeHtml(s.id)}</strong></td>
                 <td>${escapeHtml(s.name)}</td>
                 <td>${modeBadge}</td>
+                <td>${statusCell}</td>
                 <td style="font-size:12px;">${subnets}</td>
                 <td style="font-size:12px; color:var(--text-muted);">${last}</td>
                 <td style="white-space:nowrap;">${actions}</td>
@@ -93,7 +107,10 @@
             mcpServers: {
                 sentinelnet: {
                     command: "python",
-                    args: ["/percorso/SentinelNet/mcp_server.py"],
+                    // Il modulo sta in ai/, non nella radice: lo snippet è
+                    // fatto per essere incollato, quindi il percorso deve
+                    // essere quello vero.
+                    args: ["/percorso/SentinelNet/ai/mcp_server.py"],
                     env: {
                         SENTINELNET_URL: window.location.origin,
                         SENTINELNET_USERNAME: "<utente-dedicato>",
@@ -118,7 +135,7 @@
             const isEnabled = !disabled.has(t.name);
             const stKey = isEnabled ? 'mcpStEnabled' : 'mcpStDisabled';
             return `
-            <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); cursor:pointer;">
+            <label style="display:flex; align-items:flex-start; gap:8px; font-size:13px; padding:8px 10px; border:1px solid var(--border); border-radius:0; background:var(--surface); cursor:pointer;">
               <input type="checkbox" class="mcp-tool-toggle" value="${escapeHtml(t.name)}" ${isEnabled ? 'checked' : ''} style="margin-top:2px;">
               <span style="flex:1;">
                 <span style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
@@ -161,9 +178,10 @@
         { id: 'tab-map-interactive', key: 'tabInteractive' },
         { id: 'tab-categories', key: 'tabCategories' },
         { id: 'tab-security', key: 'tabSecurity' },
-        { id: 'tab-mac', key: 'tabMacTracker' },
+        { id: 'tab-endpoint', key: 'tabEndpointLoc' },
         { id: 'tab-flows', key: 'tabFlows' },
         { id: 'tab-config', key: 'tabConfigAnalyzer' },
+        { id: 'tab-netsec-audit', key: 'tabNetSecAudit' },
         { id: 'tab-ai', key: 'tabAiAssistant' },
         { id: 'tab-provisioning', key: 'tabProvisioning' },
         { id: 'tab-provisioner', key: 'tabProvisioner' },
@@ -199,7 +217,7 @@
                 const checks = allGroups.map(g =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
                        <input type="checkbox" class="scope-box" value="${escapeHtml(g)}" ${scope.includes(g) ? 'checked' : ''}
-                              onchange="saveUserGroups(this.closest('details').dataset.u)"
+                              data-action="save-user-groups" data-username="${escapeHtml(u.username)}"
                               style="accent-color:var(--primary); cursor:pointer;">
                        ${escapeHtml(g)}
                      </label>`).join('');
@@ -207,7 +225,7 @@
                     <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
                       <i class="fa-solid fa-location-dot" style="color:var(--text-muted); margin-right:4px;"></i>${summary}
                     </summary>
-                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); max-height:160px; overflow:auto;">
+                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); max-height:160px; overflow:auto;">
                       <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tenants' : 'Nessuno spuntato = tutti i tenant'}</div>
                       ${checks || `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'No tenants' : 'Nessun tenant'}</span>`}
                     </div>
@@ -220,14 +238,14 @@
             if (u.role === 'admin') {
                 tabsCell = `<span style="color:var(--text-muted); font-size:12px;">${currentLang === 'en' ? 'All tabs (admin)' : 'Tutte le tab (admin)'}</span>`;
             } else {
-                const allowed = Array.isArray(u.allowed_tabs) ? u.allowed_tabs : [];
+                const allowed = normalizeAllowedTabs(u.allowed_tabs);
                 const tabsSummary = allowed.length === 0
                     ? `<span style="color:var(--success);">${currentLang === 'en' ? 'All tabs' : 'Tutte le tab'}</span>`
                     : `<span style="color:var(--primary);">${allowed.length} ${currentLang === 'en' ? 'tab(s)' : 'tab'}</span>`;
                 const tabChecks = ASSIGNABLE_TABS.map(t =>
                     `<label style="display:flex; align-items:center; gap:6px; padding:3px 4px; font-size:12px; cursor:pointer;">
                        <input type="checkbox" class="tabs-box" value="${t.id}" ${allowed.includes(t.id) ? 'checked' : ''}
-                              onchange="markTabsDirty(this)"
+                              data-action="mark-tabs-dirty"
                               style="accent-color:var(--primary); cursor:pointer;">
                        ${i18n[currentLang][t.key] || t.id}
                      </label>`).join('');
@@ -235,11 +253,11 @@
                     <summary style="cursor:pointer; list-style:none; font-size:12px; padding:2px 0;">
                       <i class="fa-solid fa-table-columns" style="color:var(--text-muted); margin-right:4px;"></i>${tabsSummary}
                     </summary>
-                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:8px; background:var(--surface-3); max-height:200px; overflow:auto;">
+                    <div style="margin-top:6px; padding:6px; border:1px solid var(--border); border-radius:0; background:var(--surface-3); max-height:200px; overflow:auto;">
                       <div style="font-size:10px; color:var(--text-muted); margin-bottom:4px;">${currentLang === 'en' ? 'None checked = all tabs' : 'Nessuna spuntata = tutte le tab'}</div>
                       ${tabChecks}
                       <div style="margin-top:8px; display:flex; align-items:center; gap:8px;">
-                        <button type="button" class="btn btn-primary btn-small tabs-save-btn" style="display:none; width:auto; margin:0; padding:4px 10px; font-size:12px;" onclick="saveUserTabs(this)">
+                        <button type="button" class="btn btn-primary btn-small tabs-save-btn" data-action="save-user-tabs" style="display:none; width:auto; margin:0; padding:4px 10px; font-size:12px;">
                           <i class="fa-solid fa-floppy-disk"></i> ${currentLang === 'en' ? 'Save' : 'Salva'}
                         </button>
                         <span class="tabs-dirty-label" style="display:none; color:var(--warning); font-size:11px;">${currentLang === 'en' ? 'Unsaved changes' : 'Modifiche non salvate'}</span>
@@ -250,7 +268,7 @@
 
             const disabled = !!u.disabled;
             const disabledBadge = disabled
-                ? ` <span class="role-pill" style="background:rgba(255,107,124,0.15); color:var(--danger); border:1px solid rgba(255,107,124,0.35);">${currentLang === 'en' ? 'DISABLED' : 'DISABILITATO'}</span>`
+                ? ` <span class="role-pill" style="background:color-mix(in srgb, var(--danger) 15%, transparent); color:var(--danger); border:1px solid color-mix(in srgb, var(--danger) 35%, transparent);">${currentLang === 'en' ? 'DISABLED' : 'DISABILITATO'}</span>`
                 : '';
             const toggleText = disabled
                 ? (currentLang === 'en' ? 'Enable' : 'Abilita')
@@ -258,22 +276,19 @@
             const toggleIcon = disabled ? 'fa-circle-check' : 'fa-ban';
             const toggleColor = disabled ? 'var(--success)' : 'var(--warning)';
             const toggleBtn = isSelf ? '' :
-                `<button data-u="${escapeHtml(u.username)}" data-d="${disabled ? '1' : '0'}"
-                    onclick="toggleUserDisabled(this.dataset.u, this.dataset.d === '1')"
+                `<button data-action="toggle-user-disabled" data-username="${escapeHtml(u.username)}" data-disabled="${disabled ? '1' : '0'}"
                     style="color:${toggleColor}; background:none; border:none; cursor:pointer; margin-right:10px;">
                     <i class="fa-solid ${toggleIcon}"></i> ${toggleText}</button>`;
 
             return `<tr style="${disabled ? 'opacity:0.55;' : ''}">
                 <td><strong>${escapeHtml(u.username)}</strong>${isSelf ? ` <span style="color:var(--text-muted); font-size:11px;">(${currentLang === 'en' ? 'you' : 'tu'})</span>` : ''}${disabledBadge}</td>
-                <td><select data-u="${escapeHtml(u.username)}" onchange="changeUserRole(this.dataset.u, this.value)"
-                       style="font-size:12px; padding:4px 8px; border-radius:6px; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
+                <td><select data-action="change-user-role" data-username="${escapeHtml(u.username)}"
+                       style="font-size:12px; padding:4px 8px; border-radius:0; border:1px solid var(--border); background:var(--surface-3); color:var(--text); cursor:pointer; outline:none;">
                     ${roleOptions}
                   </select></td>
                 <td>${scopeCell}</td>
                 <td>${tabsCell}</td>
-                <td style="white-space:nowrap;">${toggleBtn}${isSelf
-                    ? '<span style="color:var(--text-muted); font-size:12px;">—</span>'
-                    : `<button data-u="${escapeHtml(u.username)}" onclick="deleteUser(this.dataset.u)" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button>`}</td>
+                <td style="white-space:nowrap;">${toggleBtn}<button data-action="delete-user" data-username="${escapeHtml(u.username)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${delText}</button></td>
             </tr>`;
         }).join('');
     }
@@ -348,13 +363,20 @@
     }
 
     async function deleteUser(username) {
-        const msg = currentLang === 'en' ? `Delete user "${username}"?` : `Eliminare l'utente "${username}"?`;
+        const isSelf = username === currentUsername;
+        const msg = isSelf
+            ? (currentLang === 'en'
+                ? `Delete YOUR OWN account "${username}"? You will be signed out and cannot sign back in.`
+                : `Eliminare il TUO account "${username}"? Verrai disconnesso e non potrai più accedere.`)
+            : (currentLang === 'en' ? `Delete user "${username}"?` : `Eliminare l'utente "${username}"?`);
         if (!confirm(msg)) return;
         const res = await apiFetch('/api/users/delete', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username })
         });
-        if (res && res.ok) loadUsers();
+        // Cancellato il proprio account la sessione non vale più: si esce subito,
+        // invece di lasciare che sia la prima chiamata a fallire con un 401.
+        if (res && res.ok) { if (isSelf) logout(); else loadUsers(); }
         else if (res) { const e = await res.json(); alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
     }
 
@@ -390,7 +412,10 @@
         const d = await res.json();
         renderAppSettings(d);
         loadCliBlacklistSetting();
-        loadObsSettings();
+        loadPingMonitorSettings();
+        if (typeof loadObsSettings === 'function') {
+            loadObsSettings();
+        }
         loadAppAdvSettings();
     }
 
@@ -406,6 +431,7 @@
         { key: 'retention_flows_days',  type: 'number', lbl: 'lblAppRetFlows',  grp: 'appAdvGrpRetention' },
         { key: 'retention_syslog_days', type: 'number', lbl: 'lblAppRetSyslog', grp: 'appAdvGrpRetention' },
         { key: 'retention_events_days', type: 'number', lbl: 'lblAppRetEvents', grp: 'appAdvGrpRetention' },
+        { key: 'audit_history_days',   type: 'number', lbl: 'lblAppRetAuditHist', grp: 'appAdvGrpRetention' },
     ];
 
     async function loadAppAdvSettings() {
@@ -448,7 +474,7 @@
             <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
                 ${escapeHtml(L.lblAppDataDir || 'Cartella dati (solo env SENTINELNET_DATA_DIR)')}: <code>${escapeHtml(d.data_dir || '')}</code>
             </div>
-            <button class="btn btn-primary btn-small" onclick="saveAppAdvSettings()">
+            <button id="btnSaveAppAdv" class="btn btn-primary btn-small">
                 <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || 'Salva')}
             </button>
             <div id="appAdvError" style="margin-top:10px; font-size:12px; color:var(--danger);"></div>`;
@@ -517,7 +543,7 @@
             return `<option value="${escapeHtml(ip)}" ${ip === current ? 'selected' : ''}>${escapeHtml(ip)}${hint}</option>`;
         }).join('');
         const envNote = d.env_override
-            ? `<div style="margin-top:10px; padding:8px 10px; border:1px solid var(--warning); border-radius:8px; color:var(--warning); font-size:12px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(L.msgEnvOverride)}</div>`
+            ? `<div style="margin-top:10px; padding:8px 10px; border:1px solid var(--warning); border-radius:0; color:var(--warning); font-size:12px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(L.msgEnvOverride)}</div>`
             : '';
         box.innerHTML = `
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
@@ -531,7 +557,7 @@
             </div>
             ${envNote}
             <div style="margin-top:12px;">
-                <button class="btn btn-primary btn-small" onclick="saveAppSettings()" ${d.env_override ? 'disabled' : ''} data-i18n="btnSave">
+                <button id="btnSaveAppSettings" class="btn btn-primary btn-small" ${d.env_override ? 'disabled' : ''} data-i18n="btnSave">
                     <i class="fa-solid fa-floppy-disk"></i> ${escapeHtml(L.btnSave || (currentLang === 'en' ? 'Save' : 'Salva'))}
                 </button>
             </div>
@@ -546,11 +572,149 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ host: sel.value })
         });
+        const notice = document.getElementById('netSettingsNotice');
         if (!res || !res.ok) {
             const e = res ? await res.json() : null;
-            alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || ''));
+            if (notice) notice.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || '');
             return;
         }
-        const notice = document.getElementById('netSettingsNotice');
         if (notice) notice.textContent = L.msgRestartRequired;
     }
+
+    // --- MONITOR PING CONTINUO (solo admin) ---
+
+    async function loadPingMonitorSettings() {
+        if (currentRole !== 'admin') return;
+        const toggle = document.getElementById('pingMonitorToggle');
+        const intervalEl = document.getElementById('pingMonitorInterval');
+        if (!toggle || !intervalEl) return;
+        const res = await apiFetch('/api/settings/ping-monitor');
+        if (!res || !res.ok) return;
+        const cfg = await res.json();
+        toggle.checked = !!cfg.enabled;
+        intervalEl.value = cfg.interval_seconds || 60;
+        loadPingMonitorStatus();
+    }
+
+    async function savePingMonitorSettings() {
+        const toggle = document.getElementById('pingMonitorToggle');
+        const intervalEl = document.getElementById('pingMonitorInterval');
+        const statusEl = document.getElementById('pingMonitorStatus');
+        if (!toggle || !intervalEl) return;
+        const L = i18n[currentLang];
+        const interval = parseInt(intervalEl.value, 10);
+        if (!Number.isFinite(interval) || interval < 5 || interval > 86400) {
+            if (statusEl) statusEl.textContent = L.msgPingMonitorIntervalInvalid || 'Intervallo non valido (5–86400 secondi).';
+            return;
+        }
+        const res = await apiFetch('/api/settings/ping-monitor', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: toggle.checked, interval_seconds: interval })
+        });
+        if (!res || !res.ok) {
+            const e = res ? await res.json() : null;
+            if (statusEl) statusEl.textContent = (currentLang === 'en' ? 'Error: ' : 'Errore: ') + ((e && e.detail) || '');
+            return;
+        }
+        if (statusEl) statusEl.textContent = L.msgPingMonitorSaved || 'Impostazioni monitor ping salvate.';
+        loadPingMonitorStatus();
+    }
+
+    async function loadPingMonitorStatus() {
+        const summaryEl = document.getElementById('pingMonitorSummary');
+        const statusEl = document.getElementById('pingMonitorStatus');
+        if (!summaryEl) return;
+        const L = i18n[currentLang];
+        const res = await apiFetch('/api/ping-monitor/status');
+        if (!res || !res.ok) { summaryEl.innerHTML = ''; return; }
+        const st = await res.json();
+        const lastRun = st.last_run ? new Date(st.last_run * 1000).toLocaleString() : '—';
+        if (statusEl) {
+            statusEl.textContent = st.enabled
+                ? `${L.lblPingMonitorLastRun || 'Ultimo ciclo'}: ${lastRun}`
+                : (L.msgPingMonitorDisabled || 'Monitor ping disattivato.');
+        }
+        const s = st.summary || { total: 0, up: 0, down: 0 };
+        summaryEl.innerHTML = `
+            <span class="chip">${escapeHtml(L.lblPingMonitorTotal || 'Dispositivi')}: ${s.total}</span>
+            <span class="status ok"><span class="led led-success"></span>${escapeHtml(L.lblPingMonitorUp || 'Up')}: ${s.up}</span>
+            <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>`;
+    }
+
+    // Delegated and static event listeners
+    document.getElementById('uiVariantSelect')?.addEventListener('change', (e) => {
+        if (typeof applyUiVariant === 'function') applyUiVariant(e.target.value, true);
+    });
+
+    document.getElementById('uiVariantCardsGrid')?.addEventListener('click', (e) => {
+        const card = e.target.closest('[data-action="apply-ui-variant"]');
+        if (card && card.dataset.variant && typeof applyUiVariant === 'function') {
+            applyUiVariant(card.dataset.variant, true);
+        }
+    });
+
+    document.getElementById('cliBlacklistToggle')?.addEventListener('change', saveCliBlacklistSetting);
+    document.getElementById('btnSavePingMonitor')?.addEventListener('click', savePingMonitorSettings);
+
+    document.getElementById('appAdvBody')?.addEventListener('click', (e) => {
+        if (e.target.closest('#btnSaveAppAdv')) saveAppAdvSettings();
+    });
+
+    document.getElementById('netSettingsBody')?.addEventListener('click', (e) => {
+        if (e.target.closest('#btnSaveAppSettings')) saveAppSettings();
+    });
+
+    document.getElementById('sitesTableBody')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn || !btn.dataset.siteId) return;
+        const act = btn.dataset.action;
+        const siteId = btn.dataset.siteId;
+        if (act === 'open-agent-control' && typeof openAgentControlModal === 'function') openAgentControlModal(siteId);
+        else if (act === 'regen-site-token') regenSiteToken(siteId);
+        else if (act === 'delete-site') deleteSite(siteId);
+    });
+
+    document.getElementById('usersTableBody')?.addEventListener('change', (e) => {
+        const grp = e.target.closest('[data-action="save-user-groups"]');
+        if (grp && grp.dataset.username) {
+            saveUserGroups(grp.dataset.username);
+            return;
+        }
+        const dirty = e.target.closest('[data-action="mark-tabs-dirty"]');
+        if (dirty) {
+            markTabsDirty(dirty);
+            return;
+        }
+        const role = e.target.closest('[data-action="change-user-role"]');
+        if (role && role.dataset.username) {
+            changeUserRole(role.dataset.username, role.value);
+            return;
+        }
+    });
+
+    document.getElementById('usersTableBody')?.addEventListener('click', (e) => {
+        const saveTabs = e.target.closest('[data-action="save-user-tabs"]');
+        if (saveTabs) {
+            saveUserTabs(saveTabs);
+            return;
+        }
+        const toggleDis = e.target.closest('[data-action="toggle-user-disabled"]');
+        if (toggleDis && toggleDis.dataset.username) {
+            toggleUserDisabled(toggleDis.dataset.username, toggleDis.dataset.disabled === '1');
+            return;
+        }
+        const delUser = e.target.closest('[data-action="delete-user"]');
+        if (delUser && delUser.dataset.username) {
+            deleteUser(delUser.dataset.username);
+            return;
+        }
+    });
+
+    document.getElementById('btnCreateUser')?.addEventListener('click', createUser);
+    document.getElementById('btnCreateSite')?.addEventListener('click', createSite);
+    document.getElementById('btnCopyMcpConfig')?.addEventListener('click', copyMcpConfig);
+    document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
+    document.getElementById('mcpPreviewToggle')?.addEventListener('change', (e) => {
+        if (typeof setMcpPreview === 'function') setMcpPreview(e.target.checked);
+    });
+

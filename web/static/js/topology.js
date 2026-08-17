@@ -47,6 +47,9 @@
                 return;
             }
             const toText = currentLang==='en' ? 'to' : 'verso';
+            // backupAgeLabel() sta in core.js: lo stesso dato lo mostra anche il
+            // Config Analyzer, e una seconda copia della formula divergerebbe.
+            const age = ts => ts ? ` · ${backupAgeLabel(ts)}` : '';
             box.innerHTML = devices.map(d => {
                 const pcs = (d.portchannels || []).slice().sort((a,b)=>{
                     const na=parseInt(String(a.name).replace(/\D/g,''))||0, nb=parseInt(String(b.name).replace(/\D/g,''))||0; return na-nb;
@@ -55,25 +58,40 @@
                     const neigh = (po.neighbors && po.neighbors.length)
                         ? `<span style="font-size:11px; color:var(--primary);"> <i class="fa-solid fa-arrow-right-long"></i> ${toText} <strong>${po.neighbors.map(escapeHtml).join(', ')}</strong></span>`
                         : `<span style="font-size:11px; color:var(--text-muted);"> <i class="fa-solid fa-arrow-right-long"></i> ${currentLang==='en'?'unknown neighbor':'vicino sconosciuto'}</span>`;
-                    // Stato operativo: verde se tutto su, rosso/giallo se c'è un problema.
+                    // Stato operativo. Lo stato VIVO (SNMP) vince sul backup:
+                    // descrive adesso, non l'ultimo salvataggio.
                     let stateBadge = '';
-                    if (po.status === 'up' && !po.issue) {
-                        stateBadge = `<span title="${currentLang==='en'?'All members bundled':'Tutti i membri aggregati'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
+                    if (po.live_total) {
+                        const ok = po.live_up === po.live_total;
+                        const col = ok ? 'var(--lamp-up-ink)' : 'var(--lamp-fault-ink)';
+                        stateBadge = `<span title="${currentLang==='en'?'Live SNMP state':'Stato vivo da SNMP'}" style="font-size:10px; color:${col}; border:1px solid ${col}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-tower-broadcast"></i> ${po.live_up}/${po.live_total} UP</span>`;
+                    } else if (po.status === 'up' && !po.issue) {
+                        stateBadge = `<span title="${currentLang==='en'?'All members bundled':'Tutti i membri aggregati'}" style="font-size:10px; color:var(--success); border:1px solid var(--success); border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-circle-check"></i> ${po.up}/${po.total} UP</span>`;
                     } else if (po.issue) {
                         const down = po.status === 'down';
-                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'#ff6b7c':'#ffb84d'}; border:1px solid ${down?'#ff6b7c':'#ffb84d'}; border-radius:5px; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (currentLang==='en'?'issue':'problema'))}</span>`;
+                        stateBadge = `<span title="${escapeHtml(po.issue_msg||'')}" style="font-size:10px; color:${down?'var(--lamp-fault-ink)':'var(--lamp-warn-ink)'}; border:1px solid ${down?'var(--lamp-fault)':'var(--lamp-warn)'}; border-radius:0; padding:1px 6px; margin-left:6px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(po.issue_msg || (currentLang==='en'?'issue':'problema'))}</span>`;
                     }
                     return `<div style="margin-bottom:6px;">
                         <span style="display:inline-block; font-weight:700; color:var(--warning); font-size:12px; min-width:120px;"><i class="fa-solid fa-link"></i> ${escapeHtml(po.name)}</span>
-                        <span style="font-family:var(--font-code); font-size:12px; color:var(--success);">${(po.members||[]).map(escapeHtml).join(', ')}</span>
+                        <span style="font-family:var(--font-code); font-size:12px;">${(po.members||[]).map(m => {
+                            const st = (po.live || {})[m];
+                            const shut = (po.shut_members || []).includes(m);
+                            const down = shut || (st && String(st.link).toLowerCase() === 'down');
+                            const title = shut ? (currentLang==='en'?'administratively shut':'spenta da configurazione')
+                                : (down ? (currentLang==='en'?'link down':'link giu') : '');
+                            // Un membro spento resta membro, ma non compone il
+                            // bundle: mostrarlo verde come gli altri fa credere
+                            // che l'aggregato sia integro.
+                            return `<span style="color:${down ? 'var(--lamp-fault-ink)' : 'var(--lamp-up-ink)'};"${title ? ` title="${escapeHtml(title)}"` : ''}>${escapeHtml(m)}${shut ? ' ⛔' : ''}</span>`;
+                        }).join(', ')}</span>
                         <span style="font-size:11px; color:var(--text-muted);"> (${(po.members||[]).length} ${currentLang==='en'?'members':'membri'})</span>
                         ${stateBadge}
                         ${neigh}
                     </div>`;
                 }).join('')
                     : `<div style="font-size:12px; color:var(--text-muted);">${currentLang==='en'?'No Port-Channels.':'Nessun Port-Channel.'}</div>`;
-                return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px;">
-                    <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span></h4>
+                return `<div style="background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px; margin-bottom:12px;">
+                    <h4 style="font-size:14px; margin-bottom:10px;"><i class="fa-solid fa-network-wired" style="color:var(--primary);"></i> ${escapeHtml(d.hostname)} <span style="color:var(--text-muted); font-weight:400; font-size:12px;">${escapeHtml(d.ip)} · ${escapeHtml(d.group)}</span>${age(d.backup_ts)}</h4>
                     ${pcHtml}
                 </div>`;
             }).join('');
@@ -107,6 +125,7 @@
         switch:   { color: "#4f8ef7", it: "Switch",        en: "Switch" },
         server:   { color: "#f7b84f", it: "Server",        en: "Server" },
         phone:    { color: "#38d9c0", it: "Telefono IP",   en: "IP Phone" },
+        camera:   { color: "#e8a33d", it: "Telecamera IP", en: "IP Camera" },
         pc:       { color: "#a3a3a3", it: "PC",            en: "PC" },
         other:    { color: "#8d9bb0", it: "Altro",         en: "Other" },
     };
@@ -165,11 +184,18 @@
         });
         box.innerHTML = cats.map(k => `
             <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:pointer; color:var(--text);">
-                <input type="checkbox" ${isMapCatVisible(k)?'checked':''} onchange="toggleMapCat('${k}', this.checked)" style="accent-color:var(--primary);">
-                <span style="display:inline-block; width:10px; height:10px; border-radius:2px; background:${mapCatMeta(k).color};"></span>
+                <input type="checkbox" ${isMapCatVisible(k)?'checked':''} data-action="toggle-map-cat" data-k="${escapeHtml(k)}" style="accent-color:var(--primary);">
+                <span style="display:inline-block; width:10px; height:10px; border-radius:0; background:${mapCatMeta(k).color};"></span>
                 ${mapCatLabel(k)}
             </label>`).join('');
     }
+
+    document.getElementById('mapCatList')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[data-action="toggle-map-cat"]');
+        if (cb && cb.dataset.k) {
+            toggleMapCat(cb.dataset.k, cb.checked);
+        }
+    });
 
     // Costruisce la legenda dei colori per tipo di apparato sotto la mappa.
     function renderDeviceTypeLegend() {
@@ -177,41 +203,63 @@
         if (!box) return;
         box.innerHTML = Object.keys(DEVICE_TYPE_META).map(t => {
             const m = DEVICE_TYPE_META[t];
-            return `<div class="legend-item"><span style="width:12px;height:12px;border-radius:3px;background:${m.color};display:inline-block;"></span><span>${deviceTypeLabel(t)}</span></div>`;
+            return `<div class="legend-item"><span style="width:12px;height:12px;border-radius:0;background:${m.color};display:inline-block;"></span><span>${deviceTypeLabel(t)}</span></div>`;
         }).join("");
     }
 
-    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp) {
-        let statusColor = "#8d9bb0";
-        let statusBg = "rgba(141, 155, 176, 0.1)";
-        let statusGlow = "rgba(141, 155, 176, 0.2)";
+    // ===== Stack (StackWise & co.) =====
+    // Il badge arriva dal backend su ogni nodo come n.redundancy (vedi
+    // redundancy/service.py device_redundancy_badge). Testo unico riusato da
+    // mappa classica, mappa minimal, tooltip e tab Dispositivi.
+    const STACK_COLOR = '#ff8c42';
+
+    function nodeStack(n) {
+        const r = n && n.redundancy;
+        return (r && r.type === 'stack') ? r : null;
+    }
+
+    // "2 × Cisco WS-C3850-24XS-S in STACK" — conteggio e modello dai dati.
+    function stackLine(stack, vendorTxt, fallbackModel) {
+        const parts = [vendorTxt, stack.model || fallbackModel || ''].filter(Boolean).join(' ').trim();
+        const n = stack.member_count;
+        if (!parts) return currentLang === 'en' ? `${n} units in STACK` : `${n} unità in STACK`;
+        return `${n} × ${parts} in STACK`;
+    }
+
+    function createNodeSvg(label, ip, deviceType, status, isBoundary, vendor, vtp, stack) {
+        // Il colore di stato viene letto dai token della resa attiva: l'SVG e'
+        // disegnato su canvas e non risolve var(--...), ma il neon fisso della
+        // vecchia resa era illeggibile sul laminato chiaro (1.4:1).
+        let statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
+        let statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
+        let statusGlow = cssVar('--lamp-idle', '#6c7a83');
         let statusText = "OFFLINE";
-        
+
         if (status === "online") {
-            statusColor = "#57d987"; // verde semantico
-            statusBg = "rgba(59, 225, 136, 0.15)";
-            statusGlow = "rgba(59, 225, 136, 0.4)";
+            statusColor = cssVar('--lamp-up-ink', '#6ed394');
+            statusBg = cssVar('--lamp-up-wash', 'rgba(86, 192, 122, 0.14)');
+            statusGlow = cssVar('--lamp-up', '#56c07a');
             statusText = "ONLINE";
         } else if (status === "offline") {
-            statusColor = "#ff6b7c"; // rosso neon
-            statusBg = "rgba(255, 107, 124, 0.15)";
-            statusGlow = "rgba(255, 107, 124, 0.4)";
+            statusColor = cssVar('--lamp-fault-ink', '#ff8377');
+            statusBg = cssVar('--lamp-fault-wash', 'rgba(239, 107, 94, 0.14)');
+            statusGlow = cssVar('--lamp-fault', '#ef6b5e');
             statusText = "OFFLINE";
         } else if (status === "auth_failed") {
-            statusColor = "#ffb84d"; // arancio neon
-            statusBg = "rgba(255, 184, 77, 0.15)";
-            statusGlow = "rgba(255, 184, 77, 0.4)";
+            statusColor = cssVar('--lamp-warn-ink', '#e8b055');
+            statusBg = cssVar('--lamp-warn-wash', 'rgba(224, 160, 60, 0.14)');
+            statusGlow = cssVar('--lamp-warn', '#e0a03c');
             statusText = "AUTH ERR";
         } else if (status === "discovered") {
-            statusColor = "#a3a3a3"; // grigio vicini scoperti
-            statusBg = "rgba(163, 163, 163, 0.15)";
-            statusGlow = "rgba(163, 163, 163, 0.2)";
+            statusColor = cssVar('--lamp-idle-ink', '#93a0a8');
+            statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
+            statusGlow = cssVar('--lamp-idle', '#6c7a83');
             statusText = currentLang === 'en' ? "DISCOVERED" : "RILEVATO";
         }
 
         if (isBoundary) {
-            statusColor = "#4a5568";
-            statusBg = "rgba(74, 85, 104, 0.15)";
+            statusColor = cssVar('--text-soft', '#909ba2');
+            statusBg = cssVar('--lamp-idle-wash', 'rgba(108, 122, 131, 0.16)');
             statusGlow = "transparent";
             statusText = currentLang === 'en' ? "EXTERNAL" : "ESTERNO";
         }
@@ -222,7 +270,7 @@
 
         // Colore tema per il bordo sfumato della scheda basato sullo stato del nodo
         let borderGradStart = statusColor;
-        let borderGradEnd = "#362d59";
+        let borderGradEnd = cssVar('--border-strong', '#46535c');
 
         // Badge in alto a destra: SEMPRE il tipo di apparato. Il dominio VTP, se
         // attivo, va su una riga separata sotto (non deve coprire il tipo).
@@ -232,20 +280,32 @@
         // VTP pill: quando presente il riquadro cresce in altezza (vedi hasVtp più
         // sotto) e la pillola prende una fascia orizzontale propria SOTTO le righe
         // IP/badge, così non si sovrappone più al badge tipo né all'hostname.
-        let vtpDomainSvg = '';
+        // Fasce opzionali sotto le righe IP/badge: una per riga, la scheda cresce
+        // di 22px per ciascuna (mai sovrapposte al badge tipo o all'hostname).
+        const bands = [];
+        if (stack) {
+            bands.push({
+                color: STACK_COLOR,
+                text: `STACK ×${stack.member_count}${stack.model ? ' · ' + stack.model : ''}`.slice(0, 34),
+            });
+        }
         const hasVtp = !!(vtp.showDomain && vtp.domain);
         if (hasVtp) {
             const dcol = vtpDomainColor(vtp.domain);
             borderGradStart = dcol;
-            const dEsc = String(vtp.domain).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 24);
+            const dEsc = String(vtp.domain).slice(0, 24);
             // Se disponibile, aggiunge la modalità VTP (server/client/transparent/off)
             // accanto al dominio; troncata per stare nella pillola larga 216px.
-            const modeEsc = vtp.mode ? String(vtp.mode).toLowerCase().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : '';
-            const pillTxt = (modeEsc ? `${dEsc} · ${modeEsc}` : dEsc).slice(0, 30);
-            vtpDomainSvg = `<rect x="16" y="80" width="216" height="16" rx="4" fill="${dcol}22" stroke="${dcol}" stroke-opacity="0.45" stroke-width="1" />
-          <text x="124" y="91.5" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${dcol}" text-anchor="middle" letter-spacing="0.2">VTP: ${pillTxt}</text>`;
+            const modeEsc = vtp.mode ? String(vtp.mode).toLowerCase() : '';
+            bands.push({ color: dcol, text: `VTP: ${(modeEsc ? `${dEsc} · ${modeEsc}` : dEsc).slice(0, 30)}` });
         }
-        const cardH = hasVtp ? 106 : 84;
+        const bandsSvg = bands.map((b, i) => {
+            const y = 80 + 22 * i;
+            const txt = String(b.text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            return `<rect x="16" y="${y}" width="216" height="16" rx="4" fill="${b.color}22" stroke="${b.color}" stroke-opacity="0.45" stroke-width="1" />
+          <text x="124" y="${y + 11.5}" font-family="'Rubik','Inter',sans-serif" font-size="8.5" font-weight="800" fill="${b.color}" text-anchor="middle" letter-spacing="0.2">${txt}</text>`;
+        }).join('\n');
+        const cardH = 84 + 22 * bands.length;
 
         // Carica icone vettoriali moderne basate sulla tipologia di apparato
         let iconSvg = "";
@@ -267,6 +327,9 @@
         } else if (deviceType === "phone") {
             // Icona Telefono IP
             iconSvg = `<path d="M20 15.5c-1.2 0-2.4-.2-3.6-.6-.3-.1-.7 0-1 .2l-2.2 2.2c-2.8-1.4-5.1-3.8-6.6-6.6l2.2-2.2c.3-.3.4-.7.2-1-.4-1.2-.6-2.4-.6-3.6 0-.6-.4-1-1-1H3.5c-.6 0-1 .4-1 1C2.5 17 7 21.5 16.5 21.5c.6 0 1-.4 1-1V16.5c0-.6-.4-1-1-1z" fill="${typeColor}"/>`;
+        } else if (deviceType === "camera") {
+            // Icona Telecamera IP (corpo + obiettivo)
+            iconSvg = `<path d="M4 6h11a2 2 0 0 1 2 2v1.6l4-2.4v9.6l-4-2.4V17a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zm5.5 3a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z" fill="${typeColor}"/>`;
         } else if (deviceType === "pc") {
             // Icona Workstation PC
             iconSvg = `<path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z" fill="${typeColor}"/>`;
@@ -287,8 +350,8 @@
         <svg xmlns="http://www.w3.org/2000/svg" width="240" height="${cardH}" viewBox="0 0 240 ${cardH}">
           <defs>
             <linearGradient id="cardGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#251c3e" />
-              <stop offset="100%" stop-color="#150f23" />
+              <stop offset="0%" stop-color="${cssVar('--surface-3', '#2a333a')}" />
+              <stop offset="100%" stop-color="${cssVar('--surface-2', '#181e23')}" />
             </linearGradient>
             <linearGradient id="borderGrad_${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="${borderGradStart}" />
@@ -303,7 +366,7 @@
           <path d="M2 14C2 7.37 7.37 2 14 2H18V${cardH - 2}H14C7.37 ${cardH - 2} 2 ${cardH - 7.37} 2 ${cardH - 14}V14Z" fill="${statusColor}" opacity="0.85" />
           
           <!-- Cerchio contenitore per l'icona dell'apparato (bordo nel colore del tipo) -->
-          <circle cx="44" cy="42" r="22" fill="#1f1633" stroke="${typeColor}" stroke-dasharray="1.5" stroke-width="1.5" />
+          <circle cx="44" cy="42" r="22" fill="${cssVar('--surface', '#1e242a')}" stroke="${typeColor}" stroke-dasharray="1.5" stroke-width="1.5" />
 
           <!-- Posizionamento SVG dell'icona -->
           <g transform="translate(32, 30)">
@@ -317,20 +380,20 @@
           <text x="185" y="19.5" font-family="'Rubik', 'Inter', sans-serif" font-size="8.5" font-weight="900" fill="${badgeColor}" text-anchor="middle" letter-spacing="0.3">${escapedBadge}</text>
 
           <!-- Informazioni testuali: Hostname e Indirizzo IP -->
-          <text x="78" y="32" font-family="'Rubik', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="#ffffff" letter-spacing="-0.3">${escapedLabel}</text>
-          <text x="78" y="49" font-family="Menlo, monospace" font-size="11" font-weight="700" fill="#bdb8c0">${escapedIp}</text>
+          <text x="78" y="32" font-family="'Rubik', 'Inter', -apple-system, sans-serif" font-size="13" font-weight="900" fill="${cssVar('--text', '#e8ebe6')}" letter-spacing="-0.3">${escapedLabel}</text>
+          <text x="78" y="49" font-family="Menlo, monospace" font-size="11" font-weight="700" fill="${cssVar('--text-muted', '#a2acb2')}">${escapedIp}</text>
 
           <!-- Badge del Vendor (Cisco, HPE) -->
           <rect x="78" y="58" width="55" height="14" rx="4" fill="rgba(44, 188, 195, 0.1)" stroke="rgba(44, 188, 195, 0.2)" stroke-width="1" />
-          <text x="105.5" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="9" font-weight="900" fill="#b1a7f0" text-anchor="middle" letter-spacing="0.5">${escapedVendor}</text>
+          <text x="105.5" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="9" font-weight="900" fill="${cssVar('--text-muted', '#a2acb2')}" text-anchor="middle" letter-spacing="0.5">${escapedVendor}</text>
 
           <!-- Badge dello Stato Operativo (ONLINE, OFFLINE...) -->
           <rect x="139" y="58" width="70" height="14" rx="4" fill="${statusBg}" stroke="rgba(255,255,255,0.05)" stroke-width="1" />
           <text x="174" y="68" font-family="'Rubik', 'Inter', sans-serif" font-size="8" font-weight="900" fill="${statusColor}" text-anchor="middle" letter-spacing="0.5">${statusText}</text>
 
-          <!-- Fascia VTP dedicata sotto le righe IP/badge (solo se presente): mai
-               sovrapposta al badge tipo o all'hostname (Fix B). -->
-          ${vtpDomainSvg}
+          <!-- Fasce STACK / VTP sotto le righe IP/badge (solo se presenti): mai
+               sovrapposte al badge tipo o all'hostname (Fix B). -->
+          ${bandsSvg}
 
         </svg>
         `;
@@ -340,10 +403,10 @@
     // Generatore dinamico del Tooltip HTML premium per ciascun apparato (al passaggio del mouse)
     function createNodeTooltip(n, scan, resolvedVendor) {
         let statusLed = "";
-        if (n.status === "online") statusLed = `<span style="color: #57d987; font-weight: bold;">● ONLINE</span>`;
-        else if (n.status === "offline") statusLed = `<span style="color: #ff6b7c; font-weight: bold;">● OFFLINE</span>`;
-        else if (n.status === "auth_failed") statusLed = `<span style="color: #ffb84d; font-weight: bold;">● AUTH FAILED</span>`;
-        else if (n.status === "discovered") statusLed = `<span style="color: #a3a3a3; font-weight: bold;">● DISCOVERED</span>`;
+        if (n.status === "online") statusLed = `<span style="color: var(--lamp-up-ink); font-weight: bold;">● ONLINE</span>`;
+        else if (n.status === "offline") statusLed = `<span style="color: var(--lamp-fault-ink); font-weight: bold;">● OFFLINE</span>`;
+        else if (n.status === "auth_failed") statusLed = `<span style="color: var(--lamp-warn-ink); font-weight: bold;">● AUTH FAILED</span>`;
+        else if (n.status === "discovered") statusLed = `<span style="color: var(--lamp-idle-ink); font-weight: bold;">● DISCOVERED</span>`;
         
         const firmware = (n.version) ? n.version : ((scan && scan.version) ? scan.version : (currentLang === 'en' ? "Not detected / Offline" : "Non rilevato / Offline"));
         const vendorName = (resolvedVendor && resolvedVendor !== 'discovered') ? resolvedVendor : (currentLang === 'en' ? "LLDP/CDP Neighbor" : "Vicino LLDP/CDP");
@@ -355,6 +418,11 @@
 
         // IP annunciato via CDP/LLDP diverso dall'IP di management reale: il vicino
         // ha pubblicato l'indirizzo di una SVI (es. Vlan1). Lo mostriamo come nota.
+        // Stack: numero di unità fisiche + elenco compatto (ruolo · serial).
+        const stackInfo = nodeStack(n);
+        const stackRow = stackInfo ? `
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Stack:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${STACK_COLOR};">${escapeHtml(stackLine(stackInfo, '', n.model))}${stackInfo.health === 'degraded' ? ' <i class="fa-solid fa-triangle-exclamation"></i>' : ''}<div style="font-weight: 400; font-size: 10px; color: var(--text-muted); margin-top: 2px;">${(stackInfo.members || []).map(m => escapeHtml(`${m.role || '?'} · ${m.serial || '—'}`)).join('<br>')}</div></td></tr>` : '';
+
         const reportedRow = (n.reported_ip && n.reported_ip !== n.id) ? `
             <tr style="border: none;"><td style="color: var(--warning); font-size: 11px; padding: 2px 0; border: none; background:none;">${currentLang === 'en' ? 'Announced IP:' : 'IP Annunciato:'}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--warning);" title="${currentLang === 'en' ? 'CDP/LLDP advertised a non-management IP; resolved by hostname' : 'CDP/LLDP ha annunciato un IP non di management; risolto via hostname'}">${escapeHtml(n.reported_ip)} <i class="fa-solid fa-triangle-exclamation"></i></td></tr>` : '';
 
@@ -364,14 +432,15 @@
             <i class="fa-solid fa-network-wired"></i> ${titleText}
           </div>
           <table style="width: 100%; border-collapse: collapse; background: transparent;">
-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; width: 90px; border: none; background:none;">Hostname:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.label)}</td></tr>
-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.status === 'discovered' ? (n.reported_ip || '—') : n.id)}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; width: 90px; border: none; background:none;">Hostname:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--text);">${escapeHtml(n.label)}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelIpText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--text);">${escapeHtml(n.status === 'discovered' ? (n.reported_ip || '—') : n.id)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Vendor:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; text-transform: uppercase; color:#fff;">${escapeHtml(vendorName)}</td></tr>
-            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:#fff;">${escapeHtml(n.group)}</td></tr>
+            <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelGroupText}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:var(--text);">${escapeHtml(n.group)}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${labelStatusText}</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;">${statusLed}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">${currentLang === 'en' ? 'Type:' : 'Tipo:'}</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${deviceTypeMeta(n.device_type).color};">${escapeHtml(deviceTypeLabel(n.device_type))}</td></tr>
             <tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">Firmware:</td><td style="font-size: 11px; padding: 2px 0; border: none; background:none;"><code style="font-family: var(--font-code); color: var(--primary); font-size: 10px;">${escapeHtml(firmware)}</code></td></tr>
             ${(n.vtp_domain || n.vtp_mode) ? `<tr style="border: none;"><td style="color: var(--text-muted); font-size: 11px; padding: 2px 0; border: none; background:none;">VTP:</td><td style="font-weight: 700; font-size: 11px; padding: 2px 0; border: none; background:none; color:${vtpDomainColor(n.vtp_domain)};">${escapeHtml([n.vtp_domain, n.vtp_mode].filter(Boolean).join(' · '))}</td></tr>` : ''}
+            ${stackRow}
             ${reportedRow}
           </table>
         </div>
@@ -421,15 +490,36 @@
         }
         box.innerHTML = nodesData.map(n => `
             <label style="display:flex; align-items:center; gap:8px; padding:3px 0; font-size:12px; cursor:pointer; color:var(--text);">
-                <input type="checkbox" ${isDeviceHidden(group, n.id) ? '' : 'checked'} onchange="toggleDeviceFilter('${attrEsc(group)}', '${attrEsc(n.id)}', !this.checked)" style="accent-color:var(--primary);">
+                <input type="checkbox" ${isDeviceHidden(group, n.id) ? '' : 'checked'} data-action="toggle-device-filter" data-group="${attrEsc(group)}" data-node-id="${attrEsc(n.id)}" style="accent-color:var(--primary);">
                 <span>${escapeHtml(n.label || n.id)}</span>
             </label>`).join('');
     }
+
+    document.getElementById('deviceFilterList')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[data-action="toggle-device-filter"]');
+        if (cb && cb.dataset.group && cb.dataset.nodeId) {
+            toggleDeviceFilter(cb.dataset.group, cb.dataset.nodeId, !cb.checked);
+        }
+    });
 
     async function loadInteractiveMap() {
         const groupSelect = document.getElementById('interactiveGroupSelect');
         const selectedGroup = groupSelect ? groupSelect.value : 'all';
         
+        // Sync fresh live reachability from ping monitor when available
+        try {
+            const pmRes = await apiFetch('/api/ping-monitor/status');
+            if (pmRes && pmRes.ok) {
+                const pm = await pmRes.json();
+                if (pm.devices && pm.devices.length) {
+                    pm.devices.forEach(d => {
+                        if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
+                        globalVersions[d.ip].status = d.up ? 'online' : 'offline';
+                    });
+                }
+            }
+        } catch (_) {}
+
         const res = await apiFetch("/api/network-map?group=" + encodeURIComponent(selectedGroup));
         if (!res || !res.ok) return;
         const data = await res.json();
@@ -478,6 +568,8 @@
         // Trasforma nodi filtrati per l'interfaccia interattiva Vis.js
         const nodes = filteredNodesData.map(n => {
             const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
+            const effectiveStatus = (scan && scan.status && scan.status !== 'unknown') ? scan.status : (n.status || 'offline');
+            n.status = effectiveStatus;
             
             // Risolve robustamente il vendor sul client confrontando l'IP con l'anagrafica di globalDevices
             const matchedDev = globalDevices.find(d => d.IP === n.id);
@@ -486,16 +578,18 @@
                 : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
 
             const vtp = { domain: n.vtp_domain, mode: n.vtp_mode, showDomain: showVtpDomain };
+            const stack = nodeStack(n);
+            const bandCount = (stack ? 1 : 0) + ((vtp.showDomain && vtp.domain) ? 1 : 0);
 
             return {
                 id: n.id,
                 shape: "image",
-                image: createNodeSvg(n.label, n.id, n.device_type, n.status, n.is_boundary, resolvedVendor, vtp),
+                image: createNodeSvg(n.label, n.id, n.device_type, effectiveStatus, n.is_boundary, resolvedVendor, vtp, stack),
                 title: createNodeTooltip(n, scan, resolvedVendor), // Tooltip HTML avanzato con vendor risolto
-                // Fix B: la card SVG cresce (84->106) quando mostra la fascia VTP; il
+                // Fix B: la card SVG cresce di 22px per ogni fascia (STACK, VTP); il
                 // nodo vis.js deve crescere di conseguenza, altrimenti l'immagine più
                 // alta viene ridotta in scala e il testo torna illeggibile.
-                size: (vtp.showDomain && vtp.domain) ? 46 : 38,
+                size: 38 + 8 * bandCount,
                 labelVal: n.label,
                 deviceTypeVal: n.device_type,
                 isBoundaryVal: n.is_boundary || false,
@@ -507,6 +601,18 @@
 
         // Trasforma archi filtrati per Vis.js con indicazioni di porta super leggibili ed eleganti
         const edges = filteredLinksData.map(l => {
+            if (l.kind === 'redundancy_heartbeat') {
+                return {
+                    from: l.source,
+                    to: l.target,
+                    label: 'HA',
+                    dashes: true,
+                    physics: false,
+                    color: { color: '#f9a825', highlight: '#f9a825' },
+                    width: 2,
+                    kind: 'redundancy_heartbeat'
+                };
+            }
             // Link aggregato (Port-Channel/LAG): evidenziato solo se il toggle è attivo
             const isPC      = !!l.is_portchannel;
             const emphasize = isPC && highlightPC;
@@ -535,7 +641,7 @@
             }
 
             const pcBadge = isPC ? `
-              <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:rgba(255,184,77,0.12); border:1px solid rgba(255,184,77,0.3); padding:2px 7px; border-radius:5px; margin-bottom:8px;">
+              <div style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; color:var(--warning); background:color-mix(in srgb, var(--warning) 12%, transparent); border:1px solid color-mix(in srgb, var(--warning) 30%, transparent); padding:2px 7px; border-radius:0; margin-bottom:8px;">
                 <i class="fa-solid fa-link"></i> ${currentLang === 'en' ? 'AGGREGATED' : 'AGGREGATO'} · ${escapeHtml(l.pc_name || (currentLang === 'en' ? 'Port-Channel / LAG' : 'Port-Channel / LAG'))}${l.member_count > 1 ? ` · ${l.member_count} ${currentLang === 'en' ? 'members' : 'membri'}` : ''}
               </div>` : '';
 
@@ -557,13 +663,13 @@
               <div style="display: grid; grid-template-columns: 1fr 30px 1fr; gap: 8px; align-items: center; font-size: 11px; line-height: 1.4;">
                 <div>
                   <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Source' : 'Origine'}</span>
-                  <strong style="font-size:11px; color:#fff;">${escapeHtml(l.source)}</strong>
+                  <strong style="font-size:11px; color:var(--text);">${escapeHtml(l.source)}</strong>
                   <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (l.pc_name ? shortIface(l.pc_name) : (localMembers || l.local_port)) : l.local_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
                 </div>
                 <div style="color: var(--primary); font-size: 14px; text-align: center;"><i class="fa-solid fa-right-left"></i></div>
                 <div style="text-align: right;">
                   <span style="color: var(--text-muted); font-size: 9px; display: block; text-transform: uppercase; margin-bottom: 2px;">${currentLang === 'en' ? 'Destination' : 'Destinazione'}</span>
-                  <strong style="font-size:11px; color:#fff;">${escapeHtml(l.target)}</strong>
+                  <strong style="font-size:11px; color:var(--text);">${escapeHtml(l.target)}</strong>
                   <code style="color: var(--success); display: block; font-family: var(--font-code); margin-top: 2px; font-size: 10px;">${escapeHtml(isPC ? (remoteMembers || l.remote_port) : l.remote_port) || (currentLang === 'en' ? 'Port N/A' : 'Porta N/A')}</code>
                 </div>
               </div>
@@ -583,17 +689,21 @@
                     size: 11,
                     face: "Menlo, monospace",
                     strokeWidth: 0,
-                    background: "#150f23" // Combacia con lo sfondo della mappa
+                    background: cssVar('--surface-2', '#181e23') // Combacia con lo sfondo della mappa
                 },
                 color: emphasize
                     ? { color: "rgba(255, 184, 77, 0.85)", highlight: "#ffb84d", hover: "#ffd27d" }
-                    : { color: "rgba(106, 95, 193, 0.45)", highlight: "#a99ff2", hover: "#c4bdf7" },
+                    // vis.js disegna su canvas: un "var(--x)" qui non e' un colore,
+                    // e' una stringa che il browser non risolve. Serve cssVar().
+                    : { color: "rgba(106, 95, 193, 0.45)", highlight: cssVar('--text-muted', '#8d9bb0'), hover: "#c4bdf7" },
                 dashes: emphasize ? [8, 4] : false,
                 arrows: { to: { enabled: false } },
                 width: emphasize ? 5 : 3.5,
                 hoverWidth: 1.5,
                 // ponytail: dati "piatti" (no oggetti color vis.js) usati solo dall'export Visio
-                exportVal: { isPortChannel: isPC, pcName: l.pc_name || '', color: emphasize ? '#FFB84D' : '#6A5FC1' }
+                // Il colore finisce nel .vsdx: Visio vuole un #RRGGBB, e un
+                // "var(--x)" cadeva nel fallback viola di _hex_to_rgb_fraction().
+                exportVal: { isPortChannel: isPC, pcName: l.pc_name || '', color: emphasize ? '#FFB84D' : cssVar('--text-soft', '#8d9bb0') }
             };
         });
 
@@ -606,8 +716,8 @@
     let mapViewMode = localStorage.getItem('mapViewMode') === 'minimal' ? 'minimal' : 'classic';
     function getMapView() { return mapViewMode; }
     function updateMapViewButtons() {
-        const base = 'width:auto; margin:0; padding:5px 12px; border-radius:8px; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
-        const on  = base + 'background:var(--primary); color:#fff; border-color:var(--primary);';
+        const base = 'width:auto; margin:0; padding:5px 12px; border-radius:0; border:1px solid; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;';
+        const on  = base + 'background:var(--cta); color:var(--cta-text); border-color:var(--cta);';
         const off = base + 'background:var(--surface-2); color:var(--text-muted); border-color:var(--border);';
         const c = document.getElementById('mapViewClassicBtn');
         const m = document.getElementById('mapViewMinimalBtn');
@@ -787,6 +897,7 @@
                 ap:       '#e0ecfb',
                 server:   '#fdf3d5',
                 phone:    '#dcf5ef',
+                camera:   '#fbecd6',
                 pc:       '#ededed',
                 other:    '#f4f4f4'
             }
@@ -835,7 +946,7 @@
         if (!box) return;
         box.innerHTML = MINIMAL_LINK_TYPES.map(t => `
             <label style="display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; color:var(--text-muted); cursor:pointer; user-select:none;" title="${currentLang==='en'?t.en:t.it}">
-                <input type="color" value="${linkColor(t.key)}" onchange="setMinimalLinkColor('${t.key}', this.value)" style="width:22px; height:18px; padding:0; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer;">
+                <input type="color" value="${linkColor(t.key)}" data-action="set-minimal-link-color" data-key="${attrEsc(t.key)}" style="width:22px; height:18px; padding:0; border:1px solid var(--border); border-radius:0; background:none; cursor:pointer;">
                 <span>${currentLang==='en'?t.en:t.it}</span>
             </label>`).join('')
             // Categorie personalizzate (sola visualizzazione: gestione nel pannello
@@ -849,6 +960,14 @@
                 </span>`;
             }).join('');
     }
+
+    document.getElementById('minimalLegendWrap')?.addEventListener('change', (e) => {
+        const inp = e.target.closest('input[data-action="set-minimal-link-color"]');
+        if (inp && inp.dataset.key) {
+            setMinimalLinkColor(inp.dataset.key, inp.value);
+        }
+    });
+
     function setMinimalLinkColor(key, val) {
         minimalLinkColors[key] = val;
         localStorage.setItem('minimalLinkColors', JSON.stringify(minimalLinkColors));
@@ -911,24 +1030,36 @@
         const rows = names.map(nm => {
             const c = minimalCustomCats.categories[nm];
             return `<div style="display:flex; align-items:center; gap:6px; padding:3px 0;">
-                <span style="width:14px; height:14px; border-radius:4px; background:${c.color}; border:1px solid var(--border); display:inline-block;"></span>
+                <span style="width:14px; height:14px; border-radius:0; background:${c.color}; border:1px solid var(--border); display:inline-block;"></span>
                 <span style="flex:1; font-size:12px; color:var(--text);">${escapeHtml(nm)}</span>
                 <span style="font-size:10px; color:var(--text-muted);">${dashLabel(c.dash)}</span>
-                <button onclick="deleteMinimalCustomCat('${attrEsc(nm)}')" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:#e05656; cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
+                <button data-action="delete-minimal-custom-cat" data-name="${attrEsc(nm)}" title="${currentLang==='en'?'Delete':'Elimina'}" style="background:none; border:none; color:var(--lamp-fault-ink); cursor:pointer; font-size:12px; padding:2px;"><i class="fa-solid fa-trash-can"></i></button>
             </div>`;
         }).join('') || `<div style="font-size:12px; color:var(--text-muted); padding:4px 0;">${currentLang==='en'?'No categories yet':'Nessuna categoria'}</div>`;
         box.innerHTML = rows + `
             <div style="display:flex; align-items:center; gap:6px; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);">
-                <input id="minimalCatNameInput" type="text" placeholder="${currentLang==='en'?'Name':'Nome'}" style="flex:1; min-width:0; padding:4px 6px; border-radius:5px; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:12px;">
-                <input id="minimalCatColorInput" type="color" value="#607d8b" style="width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer;">
-                <select id="minimalCatDashInput" style="padding:3px; border-radius:5px; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:11px;">
+                <input id="minimalCatNameInput" type="text" placeholder="${currentLang==='en'?'Name':'Nome'}" style="flex:1; min-width:0; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:12px;">
+                <input id="minimalCatColorInput" type="color" value="#607d8b" style="width:24px; height:24px; padding:0; border:1px solid var(--border); border-radius:0; background:none; cursor:pointer;">
+                <select id="minimalCatDashInput" style="padding:3px; border-radius:0; border:1px solid var(--border); background:var(--surface-1); color:var(--text); font-size:11px;">
                     <option value="solid">${currentLang==='en'?'Solid':'Continua'}</option>
                     <option value="dashed">${currentLang==='en'?'Dashed':'Tratteggiata'}</option>
                     <option value="dotted">${currentLang==='en'?'Dotted':'Punteggiata'}</option>
                 </select>
-                <button onclick="addMinimalCustomCat()" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--primary); color:#fff; border:none; border-radius:5px; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
+                <button data-action="add-minimal-custom-cat" title="${currentLang==='en'?'Add category':'Aggiungi categoria'}" style="background:var(--cta); color:var(--cta-text); border:none; border-radius:0; padding:4px 8px; cursor:pointer; font-size:12px;"><i class="fa-solid fa-plus"></i></button>
             </div>`;
     }
+
+    document.getElementById('minimalCustomCatList')?.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('[data-action="delete-minimal-custom-cat"]');
+        if (delBtn && delBtn.dataset.name) {
+            deleteMinimalCustomCat(delBtn.dataset.name);
+            return;
+        }
+        const addBtn = e.target.closest('[data-action="add-minimal-custom-cat"]');
+        if (addBtn) {
+            addMinimalCustomCat();
+        }
+    });
     // Menu contestuale (click destro su un cavo nella mappa minimalista) per
     // assegnare/rimuovere la categoria personalizzata di un singolo collegamento.
     function closeEdgeCatMenu() {
@@ -946,14 +1077,14 @@
         const cur = minimalCustomCats.assignments[edgeKey];
         const div = document.createElement('div');
         div.id = 'edgeCatMenu';
-        div.style.cssText = `position:fixed; left:${x}px; top:${y}px; z-index:9999; background:var(--surface-2); border:1px solid var(--border); border-radius:8px; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.5); font-family:inherit; font-size:12px; min-width:170px;`;
+        div.style.cssText = `position:fixed; left:${x}px; top:${y}px; z-index:9999; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:6px; box-shadow:0 10px 30px rgba(0,0,0,0.5); font-family:inherit; font-size:12px; min-width:170px;`;
         const rowsHtml = names.length ? names.map(nm => `
-            <div class="edgeCatRow" data-nm="${attrEsc(nm)}" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:5px; cursor:pointer; color:var(--text); ${nm===cur?'background:rgba(120,144,156,0.25);':''}">
+            <div class="edgeCatRow" data-nm="${attrEsc(nm)}" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text); ${nm===cur?'background:rgba(120,144,156,0.25);':''}">
                 <span style="width:10px; height:10px; border-radius:50%; background:${minimalCustomCats.categories[nm].color}; display:inline-block;"></span>
                 <span>${escapeHtml(nm)}</span>
             </div>`).join('')
             : `<div style="padding:4px 6px; color:var(--text-muted);">${currentLang==='en'?'No custom categories yet':'Nessuna categoria personalizzata'}</div>`;
-        const noneRow = `<div class="edgeCatRow" data-nm="" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:5px; cursor:pointer; color:var(--text-muted);">${currentLang==='en'?'None (default style)':'Nessuna (stile predefinito)'}</div>`;
+        const noneRow = `<div class="edgeCatRow" data-nm="" style="display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:0; cursor:pointer; color:var(--text-muted);">${currentLang==='en'?'None (default style)':'Nessuna (stile predefinito)'}</div>`;
         div.innerHTML = rowsHtml + `<div style="border-top:1px solid var(--border); margin:4px 0;"></div>` + noneRow;
         document.body.appendChild(div);
         div.querySelectorAll('.edgeCatRow').forEach(row => {
@@ -996,6 +1127,8 @@
 
         const nodes = nodeData.map((n, idx) => {
             const scan = globalVersions[n.id] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: n.status };
+            const effectiveStatus = (scan && scan.status && scan.status !== 'unknown') ? scan.status : (n.status || 'offline');
+            n.status = effectiveStatus;
             const matchedDev = globalDevices.find(d => d.IP === n.id);
             const resolvedVendor = (n.vendor && n.vendor !== 'discovered')
                 ? n.vendor : (matchedDev && matchedDev.Vendor ? matchedDev.Vendor : 'discovered');
@@ -1003,7 +1136,11 @@
             // Seconda riga del riquadro: vendor + modello (es. "Cisco N9K-C93180YC-EX")
             const vendorTxt = (resolvedVendor && resolvedVendor !== 'discovered')
                 ? resolvedVendor.charAt(0).toUpperCase() + resolvedVendor.slice(1) : '';
-            const modelLine = [vendorTxt, n.model || n.platform || ''].filter(Boolean).join(' ').trim();
+            // Se il nodo è uno stack la riga diventa "N × <vendor> <modello> in STACK".
+            const stack = nodeStack(n);
+            const modelLine = stack
+                ? stackLine(stack, vendorTxt, n.model || n.platform)
+                : [vendorTxt, n.model || n.platform || ''].filter(Boolean).join(' ').trim();
             // Riga di management (piccola, in corsivo/attenuata): VLAN + IP di
             // gestione mostrati DENTRO il riquadro. La VLAN arriva dal backend
             // (SVI con l'IP di management); se assente si mostra solo l'IP.
@@ -1036,14 +1173,15 @@
                 margin: S.node.margin,
                 label,
                 title: hoverInfo ? createNodeTooltip(n, scan, resolvedVendor) : undefined,
-                borderWidth: showVtpDomain && n.vtp_domain ? 2 : S.node.borderWidth,
+                borderWidth: (stack && stack.health === 'degraded') ? S.node.borderWidth + 1
+                           : (showVtpDomain && n.vtp_domain ? 2 : S.node.borderWidth),
                 borderWidthSelected: S.node.borderWidth + 1,
                 color: {
                     background: fill, border,
                     highlight: { background: fill, border: '#1a2430' },
                     hover: { background: fill, border: '#1a2430' }
                 },
-                opacity: (n.status === 'offline') ? S.node.offlineOpacity : 1,
+                opacity: (effectiveStatus === 'offline') ? S.node.offlineOpacity : 1,
                 font: S.node.font,
                 x: c.x + ((idx * 137) % (2 * jitter)) - jitter,
                 y: c.y + ((idx * 89)  % (2 * jitter)) - jitter,
@@ -1758,6 +1896,7 @@
         { key: 'version',  it: 'Versione',  en: 'Version' },
         { key: 'vtp',      it: 'VTP',       en: 'VTP' },
         { key: 'ha',       it: 'HA',        en: 'HA' },
+        { key: 'stack',    it: 'Stack',     en: 'Stack' },
         { key: 'category', it: 'Categoria', en: 'Category', fixed: true },
     ];
     function colLabel(c) { return currentLang === 'en' ? c.en : c.it; }
@@ -1771,8 +1910,15 @@
     function attrEsc(s) { return escapeHtml(String(s == null ? '' : s)).replace(/"/g, '&quot;'); }
 
     async function loadCategoriesData() {
+        const devList = document.getElementById("categoriesDeviceList");
+        if (!categoriesData && devList && devList.innerHTML.trim() === '') {
+            devList.innerHTML = `<div style="text-align:center; padding:40px; color:var(--text-muted);"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p style="margin-top:10px; font-size:13px;">${currentLang === 'en' ? 'Scanning backups and classifying devices...' : 'Analisi backup e classificazione dispositivi in corso...'}</p></div>`;
+        }
         const res = await apiFetch("/api/device-classification");
-        if (!res || !res.ok) return;
+        if (!res || !res.ok) {
+            if (devList && !categoriesData) devList.innerHTML = '';
+            return;
+        }
         categoriesData = await res.json();
         categoriesData.vendors = categoriesData.vendors || [];
         categoriesData.models = categoriesData.models || {};
@@ -1808,10 +1954,18 @@
         if (!box) return;
         box.innerHTML = CAT_COLUMNS.map(c => `
             <label style="display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; cursor:${c.fixed?'default':'pointer'}; color:${c.fixed?'var(--text-muted)':'var(--text)'};">
-                <input type="checkbox" ${isColVisible(c.key)?'checked':''} ${c.fixed?'disabled':''} onchange="toggleCatColumn('${c.key}', this.checked)" style="accent-color:var(--primary);">
+                <input type="checkbox" ${isColVisible(c.key)?'checked':''} ${c.fixed?'disabled':''} data-action="toggle-cat-column" data-key="${attrEsc(c.key)}" style="accent-color:var(--primary);">
                 ${colLabel(c)}
             </label>`).join("");
     }
+
+    document.getElementById('categoryColumnsList')?.addEventListener('change', (e) => {
+        const cb = e.target.closest('input[data-action="toggle-cat-column"]');
+        if (cb && cb.dataset.key) {
+            toggleCatColumn(cb.dataset.key, cb.checked);
+        }
+    });
+
     function toggleCatColumn(key, on) {
         catColVis[key] = on;
         localStorage.setItem('catColVis', JSON.stringify(catColVis));
@@ -1873,6 +2027,7 @@
             case 'version':  return n.version || '';
             case 'vtp':      return [n.vtp_domain, n.vtp_mode].filter(Boolean).join(' / ');
             case 'ha':       return n.ha_group || '';
+            case 'stack':    return n.stack ? stackLine(n.stack, '', n.model) : '';
             case 'category': return deviceTypeLabel(n.device_type) + (n.subcategory ? ' / ' + n.subcategory : '');
             default: return '';
         }
@@ -1881,6 +2036,8 @@
     function renderCategoriesPanel() {
         const cats = categoriesData.categories;
         const canWrite = (currentRole === 'admin' || currentRole === 'operator');
+        // Le API /api/redundancy/groups sono admin-only: la gestione stack segue.
+        const canAdmin = (currentRole === 'admin');
         const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
 
         // Conteggi per categoria RELATIVI alla sede selezionata (non al totale).
@@ -1898,17 +2055,29 @@
                 const color = deviceTypeMeta(k).color;
                 const n = counts[k] || 0;
                 const delBtn = (!c.builtin && canWrite)
-                    ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" onclick="deleteCategory('${escapeHtml(k)}')"></i>` : '';
+                    ? `<i class="fa-solid fa-trash" title="${currentLang==='en'?'Delete category':'Elimina categoria'}" style="position:absolute; top:8px; right:8px; font-size:11px; color:var(--text-muted); cursor:pointer;" data-action="delete-category" data-k="${escapeHtml(k)}"></i>` : '';
                 const subChips = c.subcategories.length
-                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" onclick="deleteSubcategory('${escapeHtml(k)}','${escapeHtml(s)}')" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
-                return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-left:4px solid ${color}; border-radius:10px; padding:14px;">
+                    ? `<div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">${c.subcategories.map(s => `<span style="display:inline-flex; align-items:center; gap:4px; font-size:10px; color:var(--text-muted); background:var(--surface); border:1px solid var(--border); border-radius:0; padding:1px 6px;">${escapeHtml(s)}${canWrite?`<i class="fa-solid fa-xmark" title="${currentLang==='en'?'Remove subcategory':'Rimuovi sottocategoria'}" data-action="delete-subcategory" data-k="${escapeHtml(k)}" data-s="${escapeHtml(s)}" style="cursor:pointer; color:var(--danger);"></i>`:''}</span>`).join('')}</div>` : '';
+                return `<div style="position:relative; background:var(--surface-2); border:1px solid var(--border); border-radius:0; padding:14px;">
                     ${delBtn}
-                    <div style="font-size:26px; font-weight:900; color:${color};">${n}</div>
+                    <div style="font-size:25px; font-weight:900; color:${color};">${n}</div>
                     <div style="font-size:12px; font-weight:700; color:var(--text); margin-top:2px;">${escapeHtml(c.label)}</div>
                     ${subChips}
                 </div>`;
             }).join("");
         }
+
+        document.getElementById('categoryCountCards')?.addEventListener('click', (e) => {
+            const delCat = e.target.closest('[data-action="delete-category"]');
+            if (delCat && delCat.dataset.k) {
+                deleteCategory(delCat.dataset.k);
+                return;
+            }
+            const delSub = e.target.closest('[data-action="delete-subcategory"]');
+            if (delSub && delSub.dataset.k && delSub.dataset.s) {
+                deleteSubcategory(delSub.dataset.k, delSub.dataset.s);
+            }
+        });
 
         const nodes = getFilteredCategoryNodes();
         const byGroup = {};
@@ -1930,13 +2099,17 @@
             switch (col.key) {
                 case 'hostname': {
                     const conflictIcon = (canWrite && n.name_options && n.name_options.length > 1)
-                        ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'CDP/LLDP name conflict — click to resolve':'Conflitto nome CDP/LLDP — clicca per risolvere'}" onclick="openConflictModal('${escapeHtml(n.id)}')" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
-                    const dot = `<span style="display:inline-block; width:9px; height:9px; border-radius:2px; background:${meta.color}; margin-right:6px;"></span>`;
+                        ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'CDP/LLDP name conflict — click to resolve':'Conflitto nome CDP/LLDP — clicca per risolvere'}" data-action="open-conflict-modal" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:var(--warning); font-size:11px;"></i>` : '';
+                    // Chevron di espansione: mostra le unità fisiche dello stack.
+                    const chevron = n.stack
+                        ? `<i class="fa-solid fa-chevron-right" id="stackChev_${attrEsc(n.id)}" title="${currentLang==='en'?'Show stack units':'Mostra unità dello stack'}" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}" style="cursor:pointer; color:${STACK_COLOR}; font-size:10px; margin-right:6px; width:9px;"></i>`
+                        : '';
+                    const dot = `${chevron}<span style="display:inline-block; width:9px; height:9px; border-radius:0; background:${meta.color}; margin-right:6px;"></span>`;
                     // Rinomina inline: modifica il nome mostrato (stage 'name', salvato col pulsante).
                     if (canWrite) {
                         const p = pendingEdits[n.id];
                         const curName = (p && Object.prototype.hasOwnProperty.call(p, 'name')) ? p.name : (n.label || '');
-                        return td(`${dot}<input value="${attrEsc(curName)}" onchange="stageEdit('${escapeHtml(n.id)}','name',this.value.trim())" title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}" placeholder="${currentLang==='en'?'name':'nome'}" style="width:150px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
+                        return td(`${dot}<input value="${attrEsc(curName)}" data-action="stage-edit-name" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Rename device':'Rinomina dispositivo'}" placeholder="${currentLang==='en'?'name':'nome'}" style="width:150px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">${conflictIcon}`);
                     }
                     return td(`${dot}${escapeHtml(n.label)} ${n.is_manual?'<i class="fa-solid fa-user-pen" title="'+(currentLang==='en'?'Manually classified':'Classificato manualmente')+'" style="font-size:10px; color:var(--warning);"></i>':''}${conflictIcon}`);
                 }
@@ -1944,23 +2117,23 @@
                     return td(escapeHtml(n.display_ip || '—'), 'font-family:var(--font-code); font-size:12px; color:var(--text-muted);');
                 case 'source': {
                     const badge = n.discovered
-                        ? `<span style="font-size:10px; color:#a3a3a3; border:1px solid #a3a3a3; border-radius:4px; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
-                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:4px; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
+                        ? `<span style="font-size:10px; color:var(--lamp-idle-ink); border:1px solid var(--lamp-idle); border-radius:0; padding:1px 5px;">${currentLang==='en'?'DISCOVERED':'SCOPERTO'}</span>`
+                        : `<span style="font-size:10px; color:var(--primary); border:1px solid var(--primary); border-radius:0; padding:1px 5px;">${currentLang==='en'?'MANAGED':'GESTITO'}</span>`;
                     // Promozione di un dispositivo scoperto a gestito (operator/admin).
                     const promote = (n.discovered && canWrite && n.display_ip)
-                        ? ` <button onclick="promoteDevice('${escapeHtml(n.id)}')" title="${currentLang==='en'?'Add to managed (triage)':'Aggiungi ai gestiti (triage)'}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:4px; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${currentLang==='en'?'Promote':'Promuovi'}</button>` : '';
+                        ? ` <button data-action="promote-device" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Add to managed (triage)':'Aggiungi ai gestiti (triage)'}" style="font-size:10px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:1px 5px;"><i class="fa-solid fa-arrow-up-from-bracket"></i> ${currentLang==='en'?'Promote':'Promuovi'}</button>` : '';
                     return td(badge + promote);
                 }
                 case 'vendor': {
                     const v = (function(){ const e = effVal(n,'vendor'); return (e && e !== 'discovered') ? e : ''; })();
                     return td(canWrite
-                        ? `<input list="catVendorDL" value="${attrEsc(v)}" onchange="stageEdit('${escapeHtml(n.id)}','vendor',this.value.trim())" placeholder="—" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `<input list="catVendorDL" value="${attrEsc(v)}" data-action="stage-edit-vendor" data-node-id="${escapeHtml(n.id)}" placeholder="—" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(v||'—')}</span>`);
                 }
                 case 'model': {
                     const vk = String(effVal(n,'vendor')||'').toLowerCase();
                     return td(canWrite
-                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(effVal(n,'model')||'')}" onchange="stageModel('${escapeHtml(n.id)}', this.value.trim())" placeholder="—" style="width:140px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        ? `<input list="catModelDL_${attrEsc(vk)}" value="${attrEsc(effVal(n,'model')||'')}" data-action="stage-model" data-node-id="${escapeHtml(n.id)}" placeholder="—" style="width:140px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
                         : `<span style="font-size:12px; color:var(--text-muted);">${escapeHtml(effVal(n,'model')||'—')}</span>`);
                 }
                 case 'version':
@@ -1971,10 +2144,22 @@
                 }
                 case 'ha': {
                     const hg = effVal(n,'ha_group') || '';
-                    const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:#ff8c42; border:1px solid #ff8c42; border-radius:4px; padding:1px 4px; margin-right:4px;">HA</span>` : '';
+                    const badge = hg ? `<span title="HA" style="font-size:9px; font-weight:900; color:var(--cond-d); border:1px solid var(--cond-d); border-radius:0; padding:1px 4px; margin-right:4px;">HA</span>` : '';
                     return td(canWrite
-                        ? `${badge}<input value="${attrEsc(hg)}" onchange="stageEdit('${escapeHtml(n.id)}','ha_group',this.value.trim())" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
-                        : (hg ? `${badge}<span style="font-size:12px; color:#ff8c42;">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
+                        ? `${badge}<input value="${attrEsc(hg)}" data-action="stage-edit-ha-group" data-node-id="${escapeHtml(n.id)}" placeholder="${currentLang==='en'?'HA group':'gruppo HA'}" style="width:110px; padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">`
+                        : (hg ? `${badge}<span style="font-size:12px; color:var(--cond-d);">${escapeHtml(hg)}</span>` : '<span style="color:var(--text-muted);">—</span>'));
+                }
+                case 'stack': {
+                    if (n.stack) {
+                        const warn = n.stack.health === 'degraded'
+                            ? ` <i class="fa-solid fa-triangle-exclamation" title="${currentLang==='en'?'Degraded stack':'Stack degradato'}" style="color:var(--danger); font-size:10px;"></i>` : '';
+                        return td(`<span title="${attrEsc(stackLine(n.stack, '', n.model))}" style="display:inline-block; white-space:nowrap; font-size:10px; font-weight:900; color:${STACK_COLOR}; border:1px solid ${STACK_COLOR}; border-radius:0; padding:2px 6px; cursor:pointer;" data-action="toggle-stack-row" data-node-id="${escapeHtml(n.id)}"><i class="fa-solid fa-layer-group"></i> STACK ×${n.stack.member_count}</span>${warn}`, 'white-space:nowrap;');
+                    }
+                    // Solo switch/router gestiti possono essere marcati a mano.
+                    const canMark = canAdmin && !n.discovered && ['switch','router'].includes(effVal(n,'category'));
+                    return td(canMark
+                        ? `<button data-action="mark-as-stack" data-node-id="${escapeHtml(n.id)}" title="${currentLang==='en'?'Declare this device as a stack':'Dichiara questo apparato come stack'}" style="white-space:nowrap; font-size:10px; cursor:pointer; border:1px solid var(--border); color:var(--text-muted); background:transparent; border-radius:0; padding:2px 6px;"><i class="fa-solid fa-layer-group"></i> ${currentLang==='en'?'Mark':'Segna'}</button>`
+                        : '<span style="color:var(--text-muted);">—</span>', 'white-space:nowrap;');
                 }
                 case 'category': {
                     const curCat = effVal(n, 'category');
@@ -1983,12 +2168,12 @@
                     // Il menù sottocategoria viene reso SOLO se la categoria ne ha:
                     // così, rimuovendo l'ultima sottocategoria, non resta spazio vuoto.
                     const subSel = (canWrite && subs.length)
-                        ? `<select class="subcat-sel" onchange="stageEdit('${escapeHtml(n.id)}','subcategory',this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                        ? `<select class="subcat-sel" data-action="stage-edit-subcategory" data-node-id="${escapeHtml(n.id)}" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                             <option value="">${currentLang==='en'?'— subcat —':'— sottocat —'}</option>
                             ${subs.map(s => `<option value="${escapeHtml(s)}"${s===curSub?' selected':''}>${escapeHtml(s)}</option>`).join('')}
                         </select>` : '';
                     const ctrl = canWrite
-                        ? `<select onchange="stageCategory('${escapeHtml(n.id)}', this.value)" style="padding:4px 6px; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
+                        ? `<select data-action="stage-category" data-node-id="${escapeHtml(n.id)}" style="padding:4px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface); color:var(--text); font-size:12px;">
                             ${categoryOptions(curCat)}
                         </select>${subSel}`
                         : `<span style="font-size:12px; color:${meta.color}; font-weight:700;">${escapeHtml(deviceTypeLabel(curCat))}</span>${curSub?` <span style="font-size:11px; color:var(--text-muted);">/ ${escapeHtml(curSub)}</span>`:''}`;
@@ -1998,9 +2183,47 @@
             }
         };
 
+        // Riga espansa con le unità fisiche dello stack (nascosta di default).
+        const stackRowHtml = (n) => {
+            if (!n.stack) return '';
+            const members = n.stack.members || [];
+            const hdr = currentLang === 'en'
+                ? ['#', 'Role', 'Model', 'Serial', 'State'] : ['#', 'Ruolo', 'Modello', 'Serial', 'Stato'];
+            // Gli input riempiono la colonna: la tabella unità occupa tutta la
+            // larghezza della riga espansa invece di stringersi a sinistra.
+            const inp = (i, field, val) => canAdmin
+                ? `<input data-stack-field="${field}" data-stack-idx="${i}" value="${attrEsc(val||'')}" style="width:100%; box-sizing:border-box; padding:3px 6px; border-radius:0; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-size:11px;">`
+                : `<span style="font-size:11px;">${escapeHtml(val || '—')}</span>`;
+            const body = members.map((m, i) => `<tr>
+                <td style="padding:3px 8px; font-size:11px; color:var(--text-muted);">${escapeHtml(String(m.index != null ? m.index : i + 1))}</td>
+                <td style="padding:3px 8px;">${inp(i, 'role', m.role)}</td>
+                <td style="padding:3px 8px;">${inp(i, 'model', m.model)}</td>
+                <td style="padding:3px 8px;">${inp(i, 'serial', m.serial)}</td>
+                <td style="padding:3px 8px; font-size:11px; white-space:nowrap; color:${m.state && m.state !== 'ready' ? 'var(--danger)' : 'var(--text-muted)'};">${escapeHtml(m.state || '—')}</td>
+            </tr>`).join('');
+            // Azioni accanto al titolo: sfruttano lo spazio orizzontale libero.
+            const actions = canAdmin ? `<div style="display:flex; gap:8px;">
+                <button data-action="save-stack-members" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--success); color:var(--success); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-floppy-disk"></i> ${currentLang==='en'?'Save stack':'Salva stack'}</button>
+                <button data-action="remove-stack" data-node-id="${escapeHtml(n.id)}" style="white-space:nowrap; font-size:11px; cursor:pointer; border:1px solid var(--danger); color:var(--danger); background:transparent; border-radius:0; padding:3px 10px;"><i class="fa-solid fa-trash"></i> ${currentLang==='en'?'Remove stack':'Rimuovi stack'}</button>
+            </div>` : '';
+            // Larghezze: #, Ruolo, Modello, Serial, Stato.
+            const widths = ['36px', '18%', '32%', '30%', '90px'];
+            return `<tr class="stack-members" data-stack-for="${attrEsc(n.id)}" style="display:none;"><td colspan="${cols.length}" style="padding:10px 14px; background:var(--surface);">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:8px;">
+                    <div style="font-size:12px; font-weight:700; color:${STACK_COLOR};"><i class="fa-solid fa-layer-group"></i> ${escapeHtml(stackLine(n.stack, '', n.model))}</div>
+                    ${actions}
+                </div>
+                <table style="width:100%; table-layout:fixed;">
+                    <colgroup>${widths.map(w=>`<col style="width:${w};">`).join('')}</colgroup>
+                    <thead><tr>${hdr.map(h=>`<th style="padding:3px 8px; font-size:10px;">${h}</th>`).join('')}</tr></thead>
+                    <tbody>${body}</tbody>
+                </table>
+            </td></tr>`;
+        };
+
         const headHtml = cols.map(c => `<th style="padding:8px;">${colLabel(c)}</th>`).join('');
         listBox.innerHTML = vendorDL + modelDLs + Object.keys(byGroup).sort().map(g => {
-            const rows = byGroup[g].map(n => `<tr data-node="${attrEsc(n.id)}" class="${pendingEdits[n.id]?'row-dirty':''}">${cols.map(c => cellHtml(c, n)).join('')}</tr>`).join("");
+            const rows = byGroup[g].map(n => `<tr data-node="${attrEsc(n.id)}" class="${pendingEdits[n.id]?'row-dirty':''}">${cols.map(c => cellHtml(c, n)).join('')}</tr>${stackRowHtml(n)}`).join("");
             return `<div style="margin-bottom:18px;">
                 <h4 style="font-size:14px; margin-bottom:8px;"><i class="fa-solid fa-location-dot" style="color:var(--primary);"></i> ${escapeHtml(g)} <span style="color:var(--text-muted); font-weight:400;">(${byGroup[g].length})</span></h4>
                 <div class="table-wrap" style="margin-top:0;">
@@ -2013,16 +2236,38 @@
         }).join("");
     }
 
+    document.getElementById('categoriesDeviceList')?.addEventListener('click', (e) => {
+        const actEl = e.target.closest('[data-action]');
+        if (!actEl) return;
+        const act = actEl.dataset.action;
+        const nodeId = actEl.dataset.nodeId;
+        if (act === 'open-conflict-modal') openConflictModal(nodeId);
+        else if (act === 'toggle-stack-row') toggleStackRow(nodeId);
+        else if (act === 'promote-device') promoteDevice(nodeId);
+        else if (act === 'mark-as-stack') markAsStack(nodeId);
+        else if (act === 'save-stack-members') saveStackMembers(nodeId);
+        else if (act === 'remove-stack') removeStack(nodeId);
+    });
+
+    document.getElementById('categoriesDeviceList')?.addEventListener('change', (e) => {
+        const actEl = e.target.closest('[data-action]');
+        if (!actEl) return;
+        const act = actEl.dataset.action;
+        const nodeId = actEl.dataset.nodeId;
+        if (act === 'stage-edit-name') stageEdit(nodeId, 'name', actEl.value.trim());
+        else if (act === 'stage-edit-vendor') stageEdit(nodeId, 'vendor', actEl.value.trim());
+        else if (act === 'stage-model') stageModel(nodeId, actEl.value.trim());
+        else if (act === 'stage-edit-ha-group') stageEdit(nodeId, 'ha_group', actEl.value.trim());
+        else if (act === 'stage-edit-subcategory') stageEdit(nodeId, 'subcategory', actEl.value);
+        else if (act === 'stage-category') stageCategory(nodeId, actEl.value);
+    });
+
     function exportCategoriesCsv() {
         const cols = CAT_COLUMNS.filter(c => isColVisible(c.key));
         const nodes = getFilteredCategoryNodes();
-        const esc = (v) => {
-            v = String(v == null ? '' : v);
-            return /[",\r\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
-        };
-        const lines = [['Group', ...cols.map(colLabel)].map(esc).join(',')];
+        const lines = [['Group', ...cols.map(colLabel)].map(csvCell).join(',')];
         nodes.forEach(n => {
-            lines.push([n.group, ...cols.map(c => catCellValue(c.key, n))].map(esc).join(','));
+            lines.push([n.group, ...cols.map(c => catCellValue(c.key, n))].map(csvCell).join(','));
         });
         const blob = new Blob(["﻿" + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -2077,6 +2322,77 @@
         updateSaveBar();
     }
 
+    // ===== Gestione stack (tab Dispositivi) =====
+    // I gruppi vivono in redundancy.db via /api/redundancy/groups (admin-only).
+    // Salvare a mano marca il gruppo 'manual': il rilevamento CLI non lo tocca più.
+    function toggleStackRow(nodeId) {
+        const row = document.querySelector(`tr.stack-members[data-stack-for="${CSS.escape(nodeId)}"]`);
+        if (!row) return;
+        const open = row.style.display === 'none';
+        row.style.display = open ? '' : 'none';
+        const chev = document.getElementById(`stackChev_${nodeId}`);
+        if (chev) chev.className = `fa-solid fa-chevron-${open ? 'down' : 'right'}`;
+    }
+
+    async function saveStackGroup(n, members, groupId) {
+        const res = await apiFetch(groupId ? `/api/redundancy/groups/${groupId}` : '/api/redundancy/groups', {
+            method: groupId ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                group_name: n.group, group_type: 'stack', name: n.label,
+                logical_device_ip: n.id, members
+            })
+        });
+        if (!(res && res.ok)) {
+            alert(currentLang==='en' ? 'Stack save failed.' : 'Salvataggio stack non riuscito.');
+            return false;
+        }
+        await loadCategoriesData();
+        return true;
+    }
+
+    async function saveStackMembers(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n || !n.stack) return;
+        const row = document.querySelector(`tr.stack-members[data-stack-for="${CSS.escape(nodeId)}"]`);
+        if (!row) return;
+        const members = (n.stack.members || []).map((m, i) => {
+            const get = (f) => row.querySelector(`[data-stack-field="${f}"][data-stack-idx="${i}"]`)?.value.trim();
+            return {
+                role: get('role') || m.role || 'member',
+                model: get('model') || null,
+                serial: get('serial') || null,
+                state: m.state || 'ready',
+                device_ip: n.id, mgmt_ip: n.id,
+            };
+        });
+        await saveStackGroup(n, members, n.stack.group_id);
+    }
+
+    async function removeStack(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n || !n.stack) return;
+        if (!confirm(currentLang==='en'
+            ? `Remove the stack group for "${n.label}"? It will be re-detected on the next triage.`
+            : `Rimuovere il gruppo stack di "${n.label}"? Verrà ricreato al prossimo triage se rilevato.`)) return;
+        const res = await apiFetch(`/api/redundancy/groups/${n.stack.group_id}`, { method: 'DELETE' });
+        if (!(res && res.ok)) { alert(currentLang==='en'?'Delete failed.':'Eliminazione non riuscita.'); return; }
+        await loadCategoriesData();
+    }
+
+    async function markAsStack(nodeId) {
+        const n = categoriesData.nodes.find(x => x.id === nodeId);
+        if (!n) return;
+        const count = parseInt(prompt(currentLang==='en' ? 'Number of units in the stack:' : 'Numero di unità dello stack:', '2') || '', 10);
+        if (!(count >= 2)) return;
+        const model = (prompt(currentLang==='en' ? 'Unit model:' : 'Modello delle unità:', n.model || '') || '').trim();
+        const members = Array.from({ length: count }, (_, i) => ({
+            role: i === 0 ? 'master' : 'member',
+            model: model || null, state: 'ready', device_ip: n.id, mgmt_ip: n.id,
+        }));
+        await saveStackGroup(n, members, null);
+    }
+
     async function promoteDevice(nodeId) {
         const n = categoriesData.nodes.find(x => x.id === nodeId);
         if (!n || !n.display_ip) { alert(currentLang==='en'?'No announced IP available.':'Nessun IP annunciato disponibile.'); return; }
@@ -2125,25 +2441,34 @@
         if (!n || !n.name_options || n.name_options.length < 2) return;
         const cur = n.label;
         const rows = n.name_options.map(o => `
-            <label style="display:flex; gap:10px; align-items:center; padding:9px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; cursor:pointer;">
+            <label style="display:flex; gap:10px; align-items:center; padding:9px 10px; border:1px solid var(--border); border-radius:0; margin-bottom:6px; cursor:pointer;">
                 <input type="radio" name="confName" value="${attrEsc(o.name)}" data-ver="${attrEsc(o.version||'')}" ${o.name===cur?'checked':''} style="accent-color:var(--primary);">
                 <span style="font-weight:700;">${escapeHtml(o.name)}</span>
                 <span style="margin-left:auto; font-family:var(--font-code); font-size:12px; color:var(--text-muted);">${o.version?escapeHtml(o.version):'—'}</span>
             </label>`).join('');
         const ov = document.createElement('div');
         ov.id = 'conflictModal';
-        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
+        ov.style.cssText = 'position:fixed; inset:0; z-index:10050; background:color-mix(in srgb, var(--bg) 82%, transparent); display:flex; align-items:center; justify-content:center; backdrop-filter:blur(4px);';
         ov.innerHTML = `
-            <div style="background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:22px; width:min(480px,92vw); box-shadow:0 20px 60px rgba(0,0,0,0.6);">
-                <h3 style="font-size:16px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${currentLang==='en'?'Resolve CDP/LLDP conflict':'Risolvi conflitto CDP/LLDP'}</h3>
+            <div style="background:var(--surface); border:1px solid var(--border); border-radius:0; padding:22px; width:min(480px,92vw); box-shadow:var(--shadow-float);">
+                <h3 style="font-size:17px; margin-bottom:6px;"><i class="fa-solid fa-code-branch" style="color:var(--warning);"></i> ${currentLang==='en'?'Resolve CDP/LLDP conflict':'Risolvi conflitto CDP/LLDP'}</h3>
                 <p style="font-size:13px; color:var(--text-muted); margin-bottom:14px;">${currentLang==='en'?'The same device was discovered with different names. Choose the name and version to keep.':'Lo stesso dispositivo è stato rilevato con nomi diversi. Scegli nome e versione da mantenere.'}</p>
                 ${rows}
                 <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px;">
-                    <button onclick="closeConflictModal()" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Cancel':'Annulla'}</button>
-                    <button onclick="confirmConflict('${escapeHtml(nodeId)}')" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);">${currentLang==='en'?'Apply':'Applica'}</button>
+                    <button data-action="close-conflict-modal" class="btn btn-secondary btn-small" style="width:auto; margin:0;">${currentLang==='en'?'Cancel':'Annulla'}</button>
+                    <button data-action="confirm-conflict" data-node-id="${escapeHtml(nodeId)}" class="btn btn-primary btn-small" style="width:auto; margin:0; background:var(--cta); color:var(--cta-text);">${currentLang==='en'?'Apply':'Applica'}</button>
                 </div>
             </div>`;
-        ov.addEventListener('click', e => { if (e.target === ov) closeConflictModal(); });
+        ov.addEventListener('click', e => {
+            if (e.target === ov || e.target.closest('[data-action="close-conflict-modal"]')) {
+                closeConflictModal();
+                return;
+            }
+            const confBtn = e.target.closest('[data-action="confirm-conflict"]');
+            if (confBtn && confBtn.dataset.nodeId) {
+                confirmConflict(confBtn.dataset.nodeId);
+            }
+        });
         document.body.appendChild(ov);
     }
     async function confirmConflict(nodeId) {
@@ -2204,21 +2529,34 @@
     }
 
     function updateTopologyMapNodeStatus(ip, newStatus) {
+        if (!globalVersions[ip]) globalVersions[ip] = {};
+        globalVersions[ip].status = newStatus;
+
         if (networkInstance && networkInstance.body && networkInstance.body.data && networkInstance.body.data.nodes) {
             const nodesDataSet = networkInstance.body.data.nodes;
             const node = nodesDataSet.get(ip);
             if (node) {
-                node.nodeDataVal.status = newStatus;
+                if (node.nodeDataVal) node.nodeDataVal.status = newStatus;
+                else node.nodeDataVal = { id: ip, label: node.labelVal || ip, status: newStatus };
 
                 const scan = globalVersions[ip] || { version: currentLang === 'en' ? "Not detected" : "Non rilevato", status: newStatus };
+                const vtp = node.vtpVal || {};
+                const stack = nodeStack(node.nodeDataVal);
 
-                node.image = createNodeSvg(node.labelVal, ip, node.deviceTypeVal, newStatus, node.isBoundaryVal, node.vendorVal, node.vtpVal);
+                if (node.shape === 'image') {
+                    node.image = createNodeSvg(node.labelVal || ip, ip, node.deviceTypeVal, newStatus, node.isBoundaryVal, node.vendorVal, vtp, stack);
+                }
                 node.title = createNodeTooltip(node.nodeDataVal, scan, node.vendorVal);
+                if (node.opacity !== undefined) {
+                    node.opacity = (newStatus === 'offline') ? 0.45 : 1;
+                }
 
                 nodesDataSet.update(node);
             }
         }
     }
+    window.updateTopologyMapNodeStatus = updateTopologyMapNodeStatus;
+    window.loadInteractiveMap = loadInteractiveMap;
 
     // Cattura la mappa corrente su un canvas ad alta risoluzione (fit su tutta
     // la topologia, sfondo opaco) e lo passa a cb; poi ripristina la vista.
@@ -2263,7 +2601,7 @@
                 out.height = src.height;
                 const ctx = out.getContext("2d");
                 // La nuova mappa minimalista ha sfondo bianco, la classica scuro.
-                ctx.fillStyle = getMapView() === 'minimal' ? "#ffffff" : "#150f23";
+                ctx.fillStyle = getMapView() === 'minimal' ? "#ffffff" : cssVar('--surface-2', '#181e23');
                 ctx.fillRect(0, 0, out.width, out.height);
                 ctx.drawImage(src, 0, 0);
                 cb(out);
@@ -2477,7 +2815,7 @@
                 return {
                     source: e.from, target: e.to,
                     label: ex.isPortChannel ? (ex.pcName || 'Port-Channel') : '',
-                    color: ex.color || '#6A5FC1'
+                    color: ex.color || cssVar('--text-soft', '#8d9bb0')
                 };
             });
         }
@@ -2526,3 +2864,30 @@
         const data = await res.json();
         console.info(`[Reset] Eliminati ${data.deleted} file cache.`);
     }
+
+    // Static event listeners for Topology and Categories tabs
+    document.getElementById('topologyGroupSelect')?.addEventListener('change', loadTopology);
+    document.getElementById('btnResetPortchannels')?.addEventListener('click', resetTopology);
+    document.getElementById('interactiveGroupSelect')?.addEventListener('change', loadInteractiveMap);
+    document.getElementById('toggleDiscovered')?.addEventListener('change', loadInteractiveMap);
+    document.getElementById('togglePortChannel')?.addEventListener('change', loadInteractiveMap);
+    document.getElementById('toggleVtpDomain')?.addEventListener('change', loadInteractiveMap);
+    document.getElementById('mapViewClassicBtn')?.addEventListener('click', () => setMapView('classic'));
+    document.getElementById('mapViewMinimalBtn')?.addEventListener('click', () => setMapView('minimal'));
+    document.getElementById('toggleMinimalHover')?.addEventListener('change', (e) => {
+        localStorage.setItem('minimalHoverInfo', e.target.checked ? '1' : '0');
+        loadInteractiveMap();
+    });
+    document.getElementById('btnResetInteractiveTopology')?.addEventListener('click', resetTopology);
+    document.getElementById('btnRefreshInteractiveMap')?.addEventListener('click', loadInteractiveMap);
+    document.getElementById('btnDownloadTopology')?.addEventListener('click', downloadTopology);
+    document.getElementById('btnExportVisioMap')?.addEventListener('click', exportVisioMap);
+    document.getElementById('btnExportPdfMap')?.addEventListener('click', exportPdfMap);
+    document.getElementById('legendToggleBtn')?.addEventListener('click', toggleLegend);
+    document.getElementById('categoriesGroupSelect')?.addEventListener('change', renderCategoriesPanel);
+    document.getElementById('categoriesCatFilter')?.addEventListener('change', renderCategoriesPanel);
+    document.getElementById('btnSaveCatEdits')?.addEventListener('click', saveCategoryEdits);
+    document.getElementById('btnDiscardCatEdits')?.addEventListener('click', discardCategoryEdits);
+    document.getElementById('btnExportCategoriesCsv')?.addEventListener('click', exportCategoriesCsv);
+    document.getElementById('btnRefreshCategories')?.addEventListener('click', loadCategoriesData);
+    document.getElementById('btnCreateCategory')?.addEventListener('click', createCategory);
