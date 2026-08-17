@@ -1,10 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Claudio-Vidhi/sentinelnet-go/internal/collect"
@@ -173,16 +176,17 @@ func (a *App) handleSendCommand(w http.ResponseWriter, r *http.Request) {
 // ---- Subnet scan ----
 
 type scanReq struct {
-	Network         string `json:"network"`
-	Vendor          string `json:"vendor"`
-	Group           string `json:"group"`
-	AutoAdd         bool   `json:"auto_add"`
-	UseDefaultCreds bool   `json:"use_default_creds"`
+	Network string `json:"network"`
+	Ports   []int  `json:"ports"`
+}
+
+type scanVerifyReq struct {
+	IPs        []string `json:"ips"`
+	Vendor     string   `json:"vendor"`
+	IdentityID string   `json:"identity_id"`
 }
 
 func (a *App) handleScanSubnet(w http.ResponseWriter, r *http.Request) {
-	claims := claimsFrom(r.Context())
-	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
 	var req scanReq
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, http.StatusBadRequest, "payload non valido")
@@ -201,74 +205,185 @@ func (a *App) handleScanSubnet(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "subnet troppo grande (max /22)")
 		return
 	}
-	if req.Group == "" {
-		req.Group = "Generale"
-	}
-	if !canSeeTenant(scoped, req.Group) {
-		writeErr(w, http.StatusForbidden, "tenant non consentito")
-		return
-	}
-	if req.Vendor == "" {
-		req.Vendor = "cisco"
+	if len(req.Ports) == 0 {
+		req.Ports = []int{22}
 	}
 
 	job := a.newJob(len(hosts))
-	go a.runScan(job.ID, hosts, req)
-	writeJSON(w, http.StatusOK, map[string]any{"job_id": job.ID, "total_hosts": len(hosts)})
+	go a.runSubnetDiscovery(job.ID, hosts, req.Ports)
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": job.ID, "status": "started", "total_hosts": len(hosts)})
 }
 
-func (a *App) runScan(jobID string, hosts []string, req scanReq) {
-	creds := collect.Credentials{Username: a.cfg.DefaultUser, Password: a.cfg.DefaultPass, EnableSecret: a.cfg.DefaultSecret}
-	// Risolto una volta sola: tutti gli host della scansione hanno lo stesso vendor.
-	drv := a.driverFor(req.Vendor)
+func (a *App) runSubnetDiscovery(jobID string, hosts []string, ports []int) {
 	g, ctx := errgroup.WithContext(context.Background())
-	g.SetLimit(32)
+	g.SetLimit(50)
+	var mu sync.Mutex
+	var found []map[string]any
+
 	for _, ip := range hosts {
 		ip := ip
 		g.Go(func() error {
-			hctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			hctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			defer cancel()
-			result := map[string]any{
-				"ip":        ip,
-				"reachable": false,
-				"ssh_open":  false,
-				"ssh_ok":    false,
-				"hostname":  "",
-				"vendor":    req.Vendor,
-				"added":     false,
-			}
-			if collect.Ping(hctx, ip) {
-				result["reachable"] = true
-			}
-			if collect.ProbeSSHPort(hctx, ip) {
-				result["reachable"] = true
-				result["ssh_open"] = true
-				if res := collect.RunBackupAndTriage(hctx, ip, creds, drv); res.Status == "success" {
-					result["ssh_ok"] = true
-					result["hostname"] = res.Hostname
-					if req.AutoAdd {
-						if err := a.store.UpsertDeviceForPromotion(ip, strings.ToLower(req.Vendor), req.Group, res.Hostname); err == nil {
-							_ = a.store.UpsertVersion(ip, strings.ToLower(req.Vendor), res.Version, "online")
-							result["added"] = true
-						}
-					}
-				} else if req.AutoAdd {
-					if err := a.store.UpsertDeviceForPromotion(ip, strings.ToLower(req.Vendor), req.Group, ""); err == nil {
-						result["added"] = true
-					}
+
+			alive := collect.Ping(hctx, ip)
+			var openPorts []int
+			for _, port := range ports {
+				if collect.ProbePort(hctx, ip, port) {
+					openPorts = append(openPorts, port)
 				}
 			}
+			if openPorts == nil {
+				openPorts = []int{}
+			}
+
+			if alive || len(openPorts) > 0 {
+				mu.Lock()
+				found = append(found, map[string]any{
+					"ip":         ip,
+					"alive":      alive,
+					"open_ports": openPorts,
+				})
+				mu.Unlock()
+			}
+
 			a.updateJob(jobID, func(j *Job) {
 				j.Progress++
-				j.Results = append(j.Results, result)
 			})
 			return nil
 		})
 	}
 	_ = g.Wait()
-	a.updateJob(jobID, func(j *Job) { j.Status = "done" })
+
+	sort.Slice(found, func(i, j int) bool {
+		return ipLess(found[i]["ip"].(string), found[j]["ip"].(string))
+	})
+
+	a.updateJob(jobID, func(j *Job) {
+		j.Status = "done"
+		j.Results = found
+		j.Progress = j.Total
+	})
 }
 
+func (a *App) handleScanVerify(w http.ResponseWriter, r *http.Request) {
+	claims := claimsFrom(r.Context())
+	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)
+
+	var req scanVerifyReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	if len(req.IPs) == 0 {
+		writeErr(w, http.StatusBadRequest, "nessun IP specificato")
+		return
+	}
+	if req.IdentityID == "" {
+		writeErr(w, http.StatusBadRequest, "identita non specificata")
+		return
+	}
+
+	ident, err := a.store.GetIdentity(req.IdentityID)
+	if err != nil || ident == nil {
+		writeErr(w, http.StatusNotFound, "identita non trovata")
+		return
+	}
+	if !canSeeTenant(scoped, ident.Tenant) {
+		writeErr(w, http.StatusNotFound, "identita non trovata")
+		return
+	}
+
+	creds, err := a.store.GetIdentityCredentials(req.IdentityID, a.vault)
+	if err != nil || creds == nil {
+		writeErr(w, http.StatusNotFound, "credenziali identita non disponibili")
+		return
+	}
+
+	c := collect.Credentials{
+		Username:     creds.Username,
+		Password:     creds.Password,
+		EnableSecret: creds.Secret,
+	}
+
+	job := a.newJob(len(req.IPs))
+	go a.runScanVerify(job.ID, req.IPs, req.Vendor, c)
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": job.ID, "status": "started", "total_hosts": len(req.IPs)})
+}
+
+func (a *App) runScanVerify(jobID string, ips []string, vendor string, creds collect.Credentials) {
+	drv := a.driverFor(vendor)
+	g, ctx := errgroup.WithContext(context.Background())
+	g.SetLimit(32)
+
+	type rowResult struct {
+		ip       string
+		ok       bool
+		hostname string
+		errStr   string
+	}
+	rows := make([]rowResult, len(ips))
+
+	for idx, ip := range ips {
+		idx := idx
+		ip := ip
+		g.Go(func() error {
+			hctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+			defer cancel()
+
+			res := collect.RunBackupAndTriage(hctx, ip, creds, drv)
+			if res.Status == "success" {
+				rows[idx] = rowResult{
+					ip:       ip,
+					ok:       true,
+					hostname: res.Hostname,
+				}
+			} else {
+				rows[idx] = rowResult{
+					ip:     ip,
+					ok:     false,
+					errStr: res.Message,
+				}
+			}
+
+			a.updateJob(jobID, func(j *Job) {
+				j.Progress++
+			})
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	var results []map[string]any
+	for _, r := range rows {
+		item := map[string]any{
+			"ip":       r.ip,
+			"ok":       r.ok,
+			"hostname": r.hostname,
+		}
+		if r.errStr != "" {
+			item["error"] = r.errStr
+		} else {
+			item["error"] = nil
+		}
+		results = append(results, item)
+	}
+
+	a.updateJob(jobID, func(j *Job) {
+		j.Status = "done"
+		j.Results = results
+		j.Progress = j.Total
+	})
+}
+
+func ipLess(a, b string) bool {
+	ipA := net.ParseIP(a).To4()
+	ipB := net.ParseIP(b).To4()
+	if ipA == nil || ipB == nil {
+		return a < b
+	}
+	return bytes.Compare(ipA, ipB) < 0
+}
 
 func splitLines(s string) []string {
 	var out []string

@@ -3248,7 +3248,10 @@
     <div class="modal" style="width: 720px; max-width: 96%;">
       <div class="modal-header">
         <h3 data-i18n="titleSubnetScan"><i class="fa-solid fa-magnifying-glass-location" style="color: var(--primary);"></i> Scansione Subnet</h3>
-        <i class="fa-solid fa-xmark modal-close" id="btnCloseSubnetScan"></i>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button type="button" class="btn btn-secondary btn-small" id="btnScanRunBackground" style="display:none; width:auto; font-size:11px; padding:3px 8px; margin:0;" data-i18n="btnRunInBackground"><i class="fa-solid fa-window-minimize"></i> Esegui in background</button>
+          <i class="fa-solid fa-xmark modal-close" id="btnCloseSubnetScan"></i>
+        </div>
       </div>
 
       <div class="form-group">
@@ -3555,6 +3558,17 @@
         <button class="btn btn-sm" data-action="close-obs-inspect-modal" style="padding:6px 16px;" data-i18n="btnClose">Chiudi</button>
       </div>
     </div>
+  </div>
+
+
+  <!-- Floating background subnet scan progress indicator -->
+  <div id="floatingScanWidget" class="floating-scan-widget" style="display:none; position:fixed; bottom:24px; right:24px; z-index:9990; background:var(--surface-3); border:1px solid var(--primary); padding:10px 14px; box-shadow:var(--shadow-float); font-size:12px; color:var(--text); align-items:center; gap:10px; cursor:pointer; user-select:none;">
+    <i class="fa-solid fa-satellite-dish fa-spin" style="color:var(--primary); font-size:14px;"></i>
+    <div style="display:flex; flex-direction:column; gap:2px;">
+      <strong id="floatingScanTitle" style="font-size:12px;">Scansione in corso...</strong>
+      <span id="floatingScanSubtitle" style="font-size:11px; color:var(--text-muted);">0%</span>
+    </div>
+    <button type="button" class="btn btn-primary btn-small" style="width:auto; margin:0 0 0 8px; padding:3px 8px; font-size:11px;" data-i18n="btnViewResults">Apri</button>
   </div>
 
   <!-- Modal: Create Redundancy Group Modal -->

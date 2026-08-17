@@ -1,6 +1,7 @@
 package collect
 
 import (
+	"fmt"
 	"context"
 	"net"
 	"os/exec"
@@ -36,8 +37,13 @@ func Ping(ctx context.Context, host string) bool {
 
 // ProbeSSHPort verifica se la porta SSH (22) di un host è aperta e accetta connessioni.
 func ProbeSSHPort(ctx context.Context, host string) bool {
-	d := net.Dialer{Timeout: 2000 * time.Millisecond}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, "22"))
+	return ProbePort(ctx, host, 22)
+}
+
+// ProbePort verifica se una specifica porta TCP di un host è aperta.
+func ProbePort(ctx context.Context, host string, port int) bool {
+	d := net.Dialer{Timeout: 1000 * time.Millisecond}
+	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, fmt.Sprintf("%d", port)))
 	if err == nil {
 		_ = conn.Close()
 		return true

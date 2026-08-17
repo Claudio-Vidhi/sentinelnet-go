@@ -91,6 +91,7 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/ping-check", a.requireAuth("operator", a.handlePingCheck))
 	r.Get("/api/ping/{ip}", a.requireAuth("operator", a.handlePingOne))
 	r.Post("/api/scan-subnet", a.requireAuth("operator", a.handleScanSubnet))
+	r.Post("/api/scan-verify", a.requireAuth("operator", a.handleScanVerify))
 	r.Get("/api/scan-subnet/{job_id}", a.requireAuth("", a.handleJobStatus))
 
 	// --- Backup download ---
