@@ -1,5 +1,5 @@
-﻿// Package audit: motore di compliance NetSec Audit e gestione checklist manutenzione.
-// Porta di services/netsec_audit/ e services/audit_checklist.py.
+// Package audit implements the NetSec Compliance Audit engine and checklist management.
+// Port of services/netsec_audit/ and services/audit_checklist.py.
 package audit
 
 import "math"
@@ -24,6 +24,16 @@ type Evidence struct {
 	Params  map[string]any `json:"params,omitempty"`
 }
 
+func Absent(messageKey string, context string, params map[string]any) Evidence {
+	return Evidence{
+		Line:    0,
+		Text:    "",
+		Context: context,
+		Message: messageKey,
+		Params:  params,
+	}
+}
+
 type RuleOutcome struct {
 	Status   string         `json:"status"`
 	Message  string         `json:"message"`
@@ -32,34 +42,37 @@ type RuleOutcome struct {
 }
 
 type BenchmarkRule struct {
-	ID          string                                  `json:"id"`
-	Vendor      string                                  `json:"vendor"`
-	Ref         string                                  `json:"ref"`
-	Level       int                                     `json:"level"`
-	Automated   bool                                    `json:"automated"`
-	Title       map[string]string                       `json:"title"`
-	Severity    string                                  `json:"severity"`
-	Category    string                                  `json:"category"`
-	AuditCLI    string                                  `json:"audit"`
-	Remediation any                                     `json:"remediation"`
-	ChecksDoc   string                                  `json:"checks,omitempty"`
-	Check       func(configText string) (RuleOutcome, error) `json:"-"`
+	ID          string            `json:"id"`
+	Vendor      string            `json:"vendor"`
+	Ref         string            `json:"ref"`
+	Level       int               `json:"level"`
+	Automated   bool              `json:"automated"`
+	Title       map[string]string `json:"title"`
+	Severity    string            `json:"severity"`
+	Category    string            `json:"category"`
+	AuditCLI    string            `json:"audit"`
+	Remediation any               `json:"remediation"`
+	ChecksDoc   string            `json:"checks,omitempty"`
+	CheckName   string            `json:"check_name,omitempty"`
+	Check       func(cfg any) RuleOutcome `json:"-"`
 }
 
 type RuleResult struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Severity    string     `json:"severity"`
-	Category    string     `json:"category"`
-	Vendor      string     `json:"vendor"`
-	Ref         string     `json:"ref"`
-	Level       int        `json:"level"`
-	Automated   bool       `json:"automated"`
-	Status      string     `json:"status"`
-	Message     string     `json:"message"`
-	Evidence    []Evidence `json:"evidence,omitempty"`
-	AuditCLI    string     `json:"audit"`
-	Remediation string     `json:"remediation"`
+	ID          string            `json:"id"`
+	Title       string            `json:"title"`
+	Severity    string            `json:"severity"`
+	Category    string            `json:"category"`
+	Vendor      string            `json:"vendor"`
+	Ref         string            `json:"ref"`
+	Level       int               `json:"level"`
+	Automated   bool              `json:"automated"`
+	AuditCLI    string            `json:"audit"`
+	Status      string            `json:"status"`
+	Device      string            `json:"device"`
+	Detail      string            `json:"detail"`
+	Remediation string            `json:"remediation"`
+	Guidance    map[string]string `json:"guidance"`
+	Evidence    []Evidence        `json:"evidence"`
 }
 
 type ScoreSummary struct {
@@ -71,16 +84,16 @@ type ScoreSummary struct {
 }
 
 type AuditScanResult struct {
-	DeviceName     string        `json:"device_name"`
-	Benchmark      string        `json:"benchmark"`
-	BenchmarkTitle string        `json:"benchmark_title"`
-	Vendor         string        `json:"vendor"`
-	Lang           string        `json:"lang"`
-	Score          *int          `json:"score"`
-	Grade          string        `json:"grade"`
-	Summary        ScoreSummary  `json:"summary"`
-	Rules          []RuleResult  `json:"rules"`
-	SavedID        *int64        `json:"saved_id,omitempty"`
+	DeviceName     string       `json:"device_name"`
+	Benchmark      string       `json:"benchmark"`
+	BenchmarkTitle string       `json:"benchmark_title"`
+	Vendor         string       `json:"vendor"`
+	Lang           string       `json:"lang"`
+	Score          *int         `json:"score"`
+	Grade          string       `json:"grade"`
+	Summary        ScoreSummary `json:"summary"`
+	Rules          []RuleResult `json:"rules"`
+	SavedID        *int64       `json:"saved_id,omitempty"`
 }
 
 func CalculateScore(rules []RuleResult) (*int, ScoreSummary) {

@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"database/sql"
@@ -150,6 +150,37 @@ func (a *App) handleNetSecAuditScan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+
+// POST /api/netsec-audit/export/docx
+func (a *App) handleNetSecAuditExportDOCX(w http.ResponseWriter, r *http.Request) {
+	var payload map[string]any
+	if err := decodeJSON(r, &payload); err != nil {
+		writeErr(w, http.StatusBadRequest, "Invalid JSON payload.")
+		return
+	}
+
+	docBytes, err := audit.GenerateAuditDOCX(payload)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, fmt.Sprintf("Errore generazione report Word: %v", err))
+		return
+	}
+
+	dev := "device"
+	if d, ok := payload["device_name"].(string); ok && d != "" {
+		dev = d
+	} else if d, ok := payload["device_ip"].(string); ok && d != "" {
+		dev = d
+	}
+	dev = strings.ReplaceAll(dev, " ", "_")
+	ts := time.Now().Format("20060102_150405")
+	filename := fmt.Sprintf("netsec_audit_%s_%s.docx", dev, ts)
+
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Length", strconv.Itoa(len(docBytes)))
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(docBytes)
+}
 // GET /api/netsec-audit/history
 func (a *App) handleNetSecAuditHistory(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFrom(r.Context())
@@ -242,6 +273,8 @@ func (a *App) handleNetSecAuditHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs, "count": len(runs)})
 }
 
+
+// POST /api/netsec-audit/export/docx
 // GET /api/netsec-audit/history/{run_id}
 func (a *App) handleNetSecAuditHistoryDetail(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFrom(r.Context())
@@ -479,4 +512,5 @@ func (a *App) handleGetAuditReport(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte(html))
 }
+
 

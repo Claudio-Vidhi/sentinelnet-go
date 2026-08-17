@@ -1,4 +1,4 @@
-﻿package api
+package api
 
 import (
 	"io/fs"
@@ -229,6 +229,7 @@ func (a *App) Router() http.Handler {
 	// --- NetSec Audit & Compliance Scanner ---
 	r.Get("/api/netsec-audit/benchmarks", a.requireAuth("", a.handleNetSecAuditBenchmarks))
 	r.Post("/api/netsec-audit/scan", a.requireAuth("", a.handleNetSecAuditScan))
+	r.Post("/api/netsec-audit/export/docx", a.requireAuth("", a.handleNetSecAuditExportDOCX))
 	r.Get("/api/netsec-audit/history", a.requireAuth("", a.handleNetSecAuditHistory))
 	r.Get("/api/netsec-audit/history/{run_id}", a.requireAuth("", a.handleNetSecAuditHistoryDetail))
 	r.Delete("/api/netsec-audit/history/{run_id}", a.requireAuth("admin", a.handleNetSecAuditHistoryDelete))
@@ -306,6 +307,7 @@ func (a *App) serveDashboard(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
 }
+
 
 
 
