@@ -13,8 +13,19 @@ go run ./cmd/sentinelnet
 # Linux / macOS / WSL (con make installato):
 make run          # go run ./cmd/sentinelnet   → http://localhost:8000
 make build        # binario statico ./sentinelnet
-make test
+make test         # esegue test Go + check sintassi JS + ESLint
+make check-js     # verifica sintassi rapida (Node VM) e tipi TS su web/static/js/
+make lint-js      # esegue ESLint flat config su web/static/js/
 ```
+
+## Sviluppo, Test & Linting
+
+SentinelNet include una suite unificata di test backend e validazione frontend:
+
+- `make test`: esegue la suite completa di test unitari Go (`internal/...`, `cmd/...`) e verifica sintassi, tipi e regole ESLint su tutti i file JavaScript del frontend.
+- `npm run check`: verifica istantanea della sintassi di tutti i 33 moduli frontend via Node VM (`scripts/check-syntax.mjs`) e controllo statico TypeScript (`tsc --noEmit`).
+- `npm run lint`: analisi statica ESLint v9 con flat config per individuare ridefinizioni di variabili, dead code e collisioni di scope.
+- `npm run lint:fix`: correzione automatica degli errori di formattazione e linting correggibili.
 
 All'avvio SentinelNet mostra una **finestra di dialogo nativa** (MessageBox su
 Windows; zenity/terminale altrove) per scegliere come aprire l'interfaccia:
