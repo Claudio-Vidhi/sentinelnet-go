@@ -18,3 +18,7 @@ jwt_secret.key
 # Env
 .env
 .env.*
+
+# Node / JS Tooling
+node_modules/
+.eslintcache

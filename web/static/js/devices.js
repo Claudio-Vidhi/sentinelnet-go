@@ -758,7 +758,6 @@
     // Discovery rows currently on screen. verify is null until the user runs
     // the optional verify step (see verifySelectedScanRows).
     let _scanRows = [];
-    let _scanJobInterval = null;
 
     // --- SUB-SCAN BACKGROUND JOB & ALERTING STATE ---
     window._activeSubnetScanJob = window._activeSubnetScanJob || {

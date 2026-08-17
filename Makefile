@@ -1,4 +1,4 @@
-.PHONY: run build build-linux build-linux-arm64 build-macos build-macos-amd64 build-all test tidy
+.PHONY: run build build-linux build-linux-arm64 build-macos build-macos-amd64 build-all test check-js lint-js tidy
 
 export CGO_ENABLED = 0
 
@@ -30,8 +30,17 @@ build-macos-amd64:
 
 build-all: build build-linux build-linux-arm64 build-macos build-macos-amd64
 
+check-js:
+	npm run check
+
+lint-js:
+	npm run lint
+
 test:
-	go test ./...
+	go test ./cmd/... ./internal/...
+	npm run check
+	npm run lint
 
 tidy:
 	go mod tidy
+

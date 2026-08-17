@@ -1,0 +1,19 @@
+{
+  "name": "sentinelnet-go",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Frontend static analysis and linting for SentinelNet",
+  "scripts": {
+    "check:syntax": "node scripts/check-syntax.mjs",
+    "check:types": "tsc --noEmit",
+    "check": "npm run check:syntax && npm run check:types",
+    "lint": "eslint web/static/js",
+    "lint:fix": "eslint web/static/js --fix"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.20.0",
+    "eslint": "^9.20.0",
+    "globals": "^15.14.0",
+    "typescript": "^5.7.3"
+  }
+}
