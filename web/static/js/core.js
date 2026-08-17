@@ -624,9 +624,20 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// --- INITIALIZATION ---
+// --- INITIALIZATION & HEARTBEAT ---
+
+let _heartbeatTimer = null;
+function startHeartbeat() {
+    if (_heartbeatTimer) return;
+    const send = () => {
+        fetch('/api/heartbeat', { method: 'POST', keepalive: true }).catch(() => {});
+    };
+    send();
+    _heartbeatTimer = setInterval(send, 3000);
+}
 
 async function appInit() {
+    startHeartbeat();
     appLoading = true;
     initLanguageSelector();
     const isAuth = await checkAuthRequirements();

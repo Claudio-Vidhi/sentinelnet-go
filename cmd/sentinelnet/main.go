@@ -118,26 +118,17 @@ func main() {
 	// Apertura dell'interfaccia (finestra app o browser) secondo la scelta.
 	url := browseURL(cfg.Addr)
 	mode := ui.Resolve(ui.Mode(chooseMode(*uiFlag)), url)
-	cmd, err := ui.Launch(mode, cfg.Addr, url)
-	if err != nil {
+	if _, err := ui.Launch(mode, cfg.Addr, url); err != nil {
 		logger.Warn("apertura interfaccia non riuscita", "err", err, "url", url)
 	} else if mode == ui.ModeNone {
 		logger.Info("interfaccia non aperta automaticamente", "url", url)
 	}
 
-	// Con interfaccia attiva, il server si arresta alla sua chiusura:
-	//  - modalità app: quando la finestra dedicata (processo) esce;
-	//  - qualsiasi modalità: quando cessano gli heartbeat dalla pagina.
+	// Con interfaccia attiva, il server si arresta quando l'utente chiude
+	// l'interfaccia (cessano gli heartbeat inviati dalla pagina).
 	if mode != ui.ModeNone {
 		app.EnableAutoShutdown()
-		go app.MonitorLiveness(8 * time.Second)
-		if cmd != nil {
-			go func() {
-				_ = cmd.Wait()
-				logger.Info("finestra app chiusa")
-				app.TriggerShutdown()
-			}()
-		}
+		go app.MonitorLiveness(15 * time.Second)
 	}
 
 	// Graceful shutdown su SIGINT/SIGTERM oppure alla chiusura dell'interfaccia.
