@@ -220,6 +220,10 @@ func (a *App) handleListInterfaces(w http.ResponseWriter, r *http.Request) {
 			}
 			items = append(items, item)
 		}
+		if err := rows.Err(); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
 	}
 
 	var visibleSupps []suppression.Rule

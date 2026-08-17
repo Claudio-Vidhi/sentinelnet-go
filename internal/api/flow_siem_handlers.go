@@ -160,6 +160,10 @@ func (a *App) handleGetFlowSiemEvents(w http.ResponseWriter, r *http.Request) {
 
 			events = append(events, ev)
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			break
+		}
 		rows.Close()
 
 		scanned += countInBatch
@@ -254,6 +258,10 @@ func (a *App) handleGetFlowSiemHistogram(w http.ResponseWriter, r *http.Request)
 				counts[idx] = [2]int{n, denies}
 			}
 		}
+	}
+	if err := rows.Err(); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	var result []siem.HistogramBucket

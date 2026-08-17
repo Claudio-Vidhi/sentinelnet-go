@@ -269,6 +269,10 @@ func (a *App) handleNetSecAuditHistory(w http.ResponseWriter, r *http.Request) {
 		_ = json.Unmarshal([]byte(sumJSON), &item.Summary)
 		runs = append(runs, item)
 	}
+	if err := rows.Err(); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"runs": runs, "count": len(runs)})
 }

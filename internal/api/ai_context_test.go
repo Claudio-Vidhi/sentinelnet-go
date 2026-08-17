@@ -37,7 +37,7 @@ func ctxAppWithDevices(t *testing.T) *App {
 	return NewApp(nil, st, nil, nil)
 }
 
-func adminCtxReq(ip string) *http.Request {
+func adminCtxReq(_ string) *http.Request {
 	req := httptest.NewRequest("POST", "/", nil)
 	return req.WithContext(context.WithValue(req.Context(), claimsKey, &auth.Claims{Username: "admin", Role: "admin"}))
 }

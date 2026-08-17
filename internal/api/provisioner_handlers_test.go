@@ -39,7 +39,7 @@ func captureAudit(t *testing.T) func() string {
 	return buf.String
 }
 
-func postProvision(t *testing.T, app *App, h http.HandlerFunc, path, body string) *httptest.ResponseRecorder {
+func postProvision(t *testing.T, _ *App, h http.HandlerFunc, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest("POST", path, strings.NewReader(body))
 	req = req.WithContext(context.WithValue(req.Context(), claimsKey, operatorClaims))

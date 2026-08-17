@@ -12,7 +12,7 @@ type pingMonitorConfigReq struct {
 }
 
 // GET /api/settings/ping-monitor
-func (a *App) handleGetPingMonitorSettings(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleGetPingMonitorSettings(w http.ResponseWriter, _ *http.Request) {
 	if a.pingMon == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": false, "interval_seconds": 60})
 		return

@@ -160,7 +160,7 @@ func (a *App) handleSetSNMPDefaults(w http.ResponseWriter, r *http.Request) {
 // --- UI Variant Settings ---
 
 // GET /api/settings/ui-variant
-func (a *App) handleGetUIVariant(w http.ResponseWriter, r *http.Request) {
+func (a *App) handleGetUIVariant(w http.ResponseWriter, _ *http.Request) {
 	variant := a.store.GetSetting("ui_variant", "default")
 	writeJSON(w, http.StatusOK, map[string]any{"variant": variant})
 }

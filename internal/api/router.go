@@ -273,10 +273,14 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/ai/generate-config", a.requireAuth("", a.handleAIGenerateConfig))
 
 	// --- IdentitÃ  credenziali (auth read, operator write) ---
+	r.Get("/api/settings/ui-variant", a.requireAuth("", a.handleGetUIVariant))
+	r.Post("/api/settings/ui-variant", a.requireAuth("admin", a.handleSetUIVariant))
+
 	r.Get("/api/identities", a.requireAuth("", a.handleListIdentities))
 	r.Post("/api/identities", a.requireAuth("operator", a.handleCreateIdentity))
 	r.Put("/api/identities/{id}", a.requireAuth("operator", a.handleUpdateIdentity))
 	r.Delete("/api/identities/{id}", a.requireAuth("operator", a.handleDeleteIdentity))
+	r.Post("/api/identities/{id}/assign", a.requireAuth("operator", a.handleAssignIdentity))
 
 	// MCP server (config tool esposti al processo `sentinelnet mcp`)
 	r.Get("/api/mcp/settings", a.requireAuth("admin", a.handleGetMCPSettings))

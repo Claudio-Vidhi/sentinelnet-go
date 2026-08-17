@@ -220,6 +220,9 @@ func validRole(role string) bool {
 // guardLastAdmin impedisce di rimuovere/degradare/disabilitare l'ultimo admin.
 // newRole="" indica eliminazione o disabilitazione.
 func (a *App) guardLastAdmin(username, newRole string) error {
+	if newRole == "admin" {
+		return nil
+	}
 	u, err := a.store.GetUser(username)
 	if err != nil || u == nil || u.Role != "admin" || u.Disabled {
 		return nil // il target non è un admin attivo: nessun vincolo
