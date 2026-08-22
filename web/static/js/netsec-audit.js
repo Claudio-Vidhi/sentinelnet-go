@@ -748,6 +748,14 @@
             if (g.default) guideItems.push(`<div class="guide-item"><strong class="guide-lbl">${T.defaultValue}:</strong> <span class="guide-val">${escapeHtml(g.default)}</span></div>`);
             const guidanceHtml = guideItems.length ? `<div class="guidance-box">${guideItems.join('')}</div>` : '';
 
+            // Guida, comando di verifica ed evidenze occupano la larghezza
+            // piena sotto la riga: incolonnati sotto il titolo leggevano su
+            // 286px mentre severita', esito e rimedio restavano vuoti per
+            // tutta l'altezza della scheda.
+            const detailHtml = (guidanceHtml || auditCmd || evBlock)
+                ? `<div class="col-detail">${guidanceHtml}${auditCmd}${evBlock}</div>`
+                : '';
+
             return `<div class="finding-card st-${escapeHtml(r.status)}">
                 <div class="col-id">
                     <strong class="rule-id">${escapeHtml(r.id)}</strong>
@@ -756,55 +764,13 @@
                 <div class="col-check">
                     <div class="rule-title">${escapeHtml(r.title)}</div>
                     <div class="rule-desc">${escapeHtml(r.detail)}</div>
-                    ${guidanceHtml}
-                    ${auditCmd}
-                    ${evBlock}
                 </div>
                 <div class="col-sev"><span class="badge ${sevClass}">${escapeHtml(r.severity || 'MEDIUM')}</span></div>
                 <div class="col-status"><span class="badge ${statusClass}">${statusIcon}${statusLabel}</span></div>
                 <div class="col-fix"><code class="remediation-code">${escapeHtml(r.remediation || '—')}</code></div>
+                ${detailHtml}
             </div>`;
         }
-
-        function paginateRules(ruleList, page1Cap = 660, otherPagesCap = 840) {
-            const pages = [];
-            let currentPage = [];
-            let currentHeight = 0;
-            const getCap = (idx) => idx === 0 ? page1Cap : otherPagesCap;
-
-            for (let i = 0; i < ruleList.length; i++) {
-                const r = ruleList[i];
-                let h = 85;
-                if (r.guidance) {
-                    let guideLines = 0;
-                    if (r.guidance.why) guideLines += Math.ceil(r.guidance.why.length / 75);
-                    if (r.guidance.impact) guideLines += Math.ceil(r.guidance.impact.length / 75);
-                    if (r.guidance.default) guideLines += 1;
-                    h += 20 + guideLines * 13;
-                }
-                if (r.audit) h += 28;
-                if (r.evidence && r.evidence.length) {
-                    h += 24 + r.evidence.length * 15;
-                }
-
-                const maxCap = getCap(pages.length);
-                if (currentPage.length > 0 && (currentHeight + h) > maxCap) {
-                    pages.push(currentPage);
-                    currentPage = [r];
-                    currentHeight = h;
-                } else {
-                    currentPage.push(r);
-                    currentHeight += h;
-                }
-            }
-            if (currentPage.length > 0) {
-                pages.push(currentPage);
-            }
-            return pages;
-        }
-
-        const pagedRules = paginateRules(rules);
-        const totalPages = pagedRules.length;
 
         const partialBanner = unknown > 0
             ? `<div class="warn-banner"><strong>${T.partialTitle}</strong> ${T.partial(s.total - unknown, s.total, unknown)}</div>`
@@ -822,12 +788,15 @@
             <div class="col-fix">${T.thFix}</div>
         </div>`;
 
-        const pagesHtml = pagedRules.map((pageRules, pIndex) => {
-            const pageNum = pIndex + 1;
-            const cardsHtml = pageRules.map(r => renderRuleCard(r)).join('');
+        // Le pagine non si stimano piu' a occhio: si emette una pagina 1 con
+        // tutte le schede dentro, e lo script del documento le ridistribuisce
+        // misurando l'ingombro reale. Un'altezza stimata sbagliata o gonfiava
+        // il report di pagine mezze vuote o, peggio, tagliava una scheda
+        // contro «overflow: hidden» senza dirlo.
+        const allCardsHtml = rules.map(r => renderRuleCard(r)).join('');
+        const pageLabel = lang === 'en' ? 'Page' : 'Pagina';
 
-            if (pIndex === 0) {
-                return `<div class="pdf-page" id="pdf-page-1">
+        const pagesHtml = `<div class="pdf-page" id="pdf-page-1">
                     <div class="report-header">
                         <div>
                             <h1 class="brand-title">SentinelNet <span style="font-weight:400; color:#64748b;">|</span> ${T.heading}</h1>
@@ -855,37 +824,32 @@
 
                     <div class="findings-list">
                         ${findingsHeaderHtml}
-                        ${cardsHtml}
+                        ${allCardsHtml}
                     </div>
 
                     <div class="pdf-page-footer">
                         <span>${T.footerNotice}</span>
-                        <span>${lang === 'en' ? 'Page' : 'Pagina'} 1 / ${totalPages}</span>
+                        <span class="page-num"></span>
                     </div>
-                </div>`;
-            }
-
-            const noteHtml = (pIndex === totalPages - 1) ? `<div class="report-note">${T.note}</div>` : '';
-
-            return `<div class="pdf-page" id="pdf-page-${pageNum}">
-                <div class="page-top-bar">
-                    <span class="page-top-brand"><strong>SentinelNet</strong> | ${T.heading}</span>
-                    <span class="page-top-meta">${escapeHtml(device)} &bull; ${escapeHtml(benchmark)}</span>
                 </div>
 
-                <div class="findings-list">
-                    ${findingsHeaderHtml}
-                    ${cardsHtml}
+                <div class="pdf-page pdf-tpl" data-tpl="page">
+                    <div class="page-top-bar">
+                        <span class="page-top-brand"><strong>SentinelNet</strong> | ${T.heading}</span>
+                        <span class="page-top-meta">${escapeHtml(device)} &bull; ${escapeHtml(benchmark)}</span>
+                    </div>
+
+                    <div class="findings-list">
+                        ${findingsHeaderHtml}
+                    </div>
+
+                    <div class="pdf-page-footer">
+                        <span>${T.footerNotice}</span>
+                        <span class="page-num"></span>
+                    </div>
                 </div>
 
-                ${noteHtml}
-
-                <div class="pdf-page-footer">
-                    <span>${T.footerNotice}</span>
-                    <span>${lang === 'en' ? 'Page' : 'Pagina'} ${pageNum} / ${totalPages}</span>
-                </div>
-            </div>`;
-        }).join('\n');
+                <div class="report-note pdf-tpl" data-tpl="note">${T.note}</div>`;
 
         const html = `<!doctype html>
 <html lang="${lang}">
@@ -1064,12 +1028,17 @@ body {
     text-align: center;
     border-top: 3px solid #64748b;
 }
-.kpi-score { border-top-color: ${scoreColor}; }
+.kpi-score { border-top-color: ${scoreColor}; background: #f8fafc; }
 .kpi-pass { border-top-color: #10b981; }
 .kpi-fail { border-top-color: #ef4444; }
 .kpi-warn { border-top-color: #f59e0b; }
-.kpi-unknown { border-top-color: #64748b; }
+.kpi-unknown { border-top-color: #94a3b8; }
 .kpi-num { font-size: 15px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+.kpi-score .kpi-num { color: ${scoreColor}; }
+.kpi-pass .kpi-num { color: #059669; }
+.kpi-fail .kpi-num { color: #dc2626; }
+.kpi-warn .kpi-num { color: #d97706; }
+.kpi-unknown .kpi-num { color: #475569; }
 .kpi-label { font-size: 8px; font-weight: 700; text-transform: uppercase; color: #475569; margin-top: 2px; }
 
 .warn-banner {
@@ -1118,6 +1087,7 @@ body {
 .col-sev { text-align: center; }
 .col-status { text-align: center; }
 .col-fix { min-width: 0; word-break: break-word; }
+.col-detail { grid-column: 2 / -1; min-width: 0; }
 
 .badge {
     display: inline-block;
@@ -1138,7 +1108,18 @@ body {
 .badge-high { background: #ea580c; color: #ffffff; }
 .badge-medium { background: #f59e0b; color: #000000; }
 .badge-low { background: #64748b; color: #ffffff; }
+.col-status .badge { white-space: normal; }
 .badge-ref { background: #e2e8f0; color: #1e293b; font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 8px; font-weight: 600; margin-top: 2px; }
+
+/* Il report riporta comandi CLI: nessuna legatura, altrimenti «/ set» o «!=»
+   vengono disegnati come un glifo solo e il comando non e' piu' copiabile
+   a occhio da chi lo esegue sull'apparato. */
+.rule-id, .badge-ref, .verify-box code, .evidence-box, .remediation-code {
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "calt" 0;
+}
+.pdf-tpl { display: none !important; }
+.pdf-page.pdf-page-tall { height: auto; max-height: none; }
 .ref-badges { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 3px; }
 
 .rule-id { font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9px; color: #0f172a; font-weight: 700; word-break: break-all; }
@@ -1190,7 +1171,7 @@ body {
 .evidence-item { display: flex; gap: 8px; margin-bottom: 1px; }
 .evidence-line { color: #475569; font-weight: 700; min-width: 45px; }
 .evidence-ctx { color: #0f172a; font-weight: 700; min-width: 95px; }
-.evidence-txt { color: #b91c1c; font-weight: 700; word-break: break-all; }
+.evidence-txt { color: #b91c1c; font-weight: 700; overflow-wrap: anywhere; }
 
 .remediation-code {
     font-family: 'Azeret Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
@@ -1203,7 +1184,7 @@ body {
     display: block;
     font-weight: 600;
     white-space: pre-wrap;
-    word-break: break-all;
+    overflow-wrap: anywhere;
     min-width: 0;
 }
 
@@ -1232,77 +1213,131 @@ body {
 @media print {
     body { padding: 0; margin: 0; background: #ffffff; }
     .no-print { display: none !important; }
-    .report-pages-container { width: 100%; margin: 0; }
+    /* Lo stacco fra i fogli dell'anteprima, in stampa, spinge ogni pagina
+       piu' in basso della precedente: il taglio non cade piu' dove lo ha
+       messo l'impaginatore. */
+    .report-pages-container { width: 100%; margin: 0; display: block; gap: 0; }
     .pdf-page {
         margin: 0;
         box-shadow: none;
         width: 100%;
-        height: 100vh;
-        max-height: 100vh;
-        min-height: 100vh;
+        height: 297mm;
+        max-height: 297mm;
+        min-height: 297mm;
         page-break-after: always;
         break-after: page;
     }
+    /* L'ultima pagina non chiede un foglio dopo di se': sarebbe bianco. */
+    .pdf-page:last-child { page-break-after: auto; break-after: auto; }
 }
 </style>
 <base href="/">
-<script src="/static/vendor/html2pdf/html2pdf.bundle.min.js"></script>
 <script>
+// Impagina misurando: una scheda entra nella pagina finche' il piede resta
+// dentro il box di padding. Nessuna stima di altezza, quindi ne' pagine mezze
+// vuote ne' schede tagliate dall'overflow.
+function paginateReport() {
+    var container = document.querySelector('.report-pages-container');
+    if (!container) return;
+    var pageTpl = container.querySelector('[data-tpl="page"]');
+    var noteTpl = container.querySelector('[data-tpl="note"]');
+    if (!pageTpl) return;
+    container.removeChild(pageTpl);
+    if (noteTpl) container.removeChild(noteTpl);
+    pageTpl.classList.remove('pdf-tpl');
+    pageTpl.removeAttribute('data-tpl');
+    if (noteTpl) {
+        noteTpl.classList.remove('pdf-tpl');
+        noteTpl.removeAttribute('data-tpl');
+    }
+
+    function overflows(page) {
+        var foot = page.querySelector('.pdf-page-footer');
+        var pad = parseFloat(getComputedStyle(page).paddingBottom) || 0;
+        return foot.getBoundingClientRect().bottom
+             > page.getBoundingClientRect().bottom - pad + 0.5;
+    }
+
+    function addPage() {
+        var p = pageTpl.cloneNode(true);
+        container.appendChild(p);
+        return p;
+    }
+
+    var page = container.querySelector('.pdf-page');
+    var list = page.querySelector('.findings-list');
+    var cards = Array.prototype.slice.call(list.querySelectorAll('.finding-card'));
+    cards.forEach(function(c) { list.removeChild(c); });
+
+    // Una pagina cresciuta non va piu' in overflow: senza questo, tutte le
+    // schede successive le finirebbero dentro.
+    var startNewPage = false;
+
+    for (var i = 0; i < cards.length; i++) {
+        if (startNewPage) {
+            page = addPage();
+            list = page.querySelector('.findings-list');
+            startNewPage = false;
+        }
+        list.appendChild(cards[i]);
+        if (!overflows(page)) continue;
+        if (list.querySelectorAll('.finding-card').length > 1) {
+            list.removeChild(cards[i]);
+            page = addPage();
+            list = page.querySelector('.findings-list');
+            list.appendChild(cards[i]);
+        }
+        // Le evidenze sono una riga per policy: non hanno un tetto, quindi una
+        // scheda puo' superare l'altezza di una pagina. Su una pagina di
+        // altezza fissa «overflow: hidden» la taglierebbe in silenzio, e un
+        // report di conformita' che perde evidenze senza dirlo e' peggio di un
+        // report con una pagina piu' lunga delle altre.
+        if (overflows(page)) {
+            page.classList.add('pdf-page-tall');
+            startNewPage = true;
+        }
+    }
+
+    if (noteTpl) {
+        page.insertBefore(noteTpl, page.querySelector('.pdf-page-footer'));
+        if (overflows(page)) {
+            page.removeChild(noteTpl);
+            page = addPage();
+            page.insertBefore(noteTpl, page.querySelector('.pdf-page-footer'));
+        }
+    }
+
+    var pages = container.querySelectorAll('.pdf-page');
+    for (var j = 0; j < pages.length; j++) {
+        pages[j].id = 'pdf-page-' + (j + 1);
+        var num = pages[j].querySelector('.page-num');
+        if (num) num.textContent = '${pageLabel} ' + (j + 1) + ' / ' + pages.length;
+    }
+}
+
 window.addEventListener('DOMContentLoaded', function() {
     if (window.self === window.top) {
         var bar = document.querySelector('.report-actions-bar');
         if (bar) bar.style.display = 'flex';
     }
+    // I font monospace cambiano l'ingombro delle evidenze: misurare prima che
+    // siano pronti sposterebbe i tagli di pagina.
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(paginateReport);
+    } else {
+        paginateReport();
+    }
 });
 
-async function downloadPdf() {
-    var btn = document.querySelector('.act-btn-green');
-    var origText = btn ? btn.textContent : '';
-    if (btn) btn.textContent = '...';
-
-    var h2p = (typeof html2pdf !== 'undefined') ? html2pdf : (window.parent && window.parent.html2pdf);
-    if (!h2p && window.parent && typeof window.parent.ensureHtml2Pdf === 'function') {
-        try {
-            h2p = await window.parent.ensureHtml2Pdf();
-        } catch(err) {}
+// Il PDF lo stampa il server con lo stesso motore che disegna questa pagina.
+// html2canvas ridisegnava il documento in una tela sola e la affettava a passo
+// fisso: bastava una scheda piu' alta di una pagina perche' ogni foglio
+// successivo cadesse a un terzo di pagina dal taglio giusto.
+function downloadPdf() {
+    if (window.parent && typeof window.parent.downloadModalPdf === 'function') {
+        return window.parent.downloadModalPdf();
     }
-
-    if (h2p) {
-        var opt = {
-            margin: 0,
-            filename: '${filename}.pdf',
-            image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: {
-                scale: 2,
-                useCORS: true,
-                backgroundColor: '#ffffff',
-                logging: false,
-                scrollY: 0,
-                scrollX: 0
-            },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-            pagebreak: { mode: 'avoid-all' }
-        };
-        var container = document.querySelector('.report-pages-container') || document.body;
-        var origGap = container.style.gap;
-        var pages = container.querySelectorAll('.pdf-page');
-        container.style.gap = '0px';
-        pages.forEach(function(p) { p.style.boxShadow = 'none'; });
-
-        try {
-            await h2p().set(opt).from(container).save();
-        } catch(e) {
-            console.error('PDF error:', e);
-            alert('Errore durante la generazione del PDF: ' + (e.message || e));
-        } finally {
-            container.style.gap = origGap;
-            pages.forEach(function(p) { p.style.boxShadow = ''; });
-            if (btn) btn.textContent = origText;
-        }
-    } else {
-        if (btn) btn.textContent = origText;
-        alert('Libreria PDF non caricata. Riprova.');
-    }
+    window.print();
 }
 
 function downloadDocx() {
@@ -1405,50 +1440,36 @@ ${pagesHtml}
             btn.disabled = true;
         }
         try {
-            const h2p = await ensureHtml2Pdf();
-            if (!h2p) {
-                throw new Error(currentLang === 'en' ? 'PDF library not loaded' : 'Libreria PDF non disponibile');
-            }
-
+            // Si manda al server l'HTML dell'anteprima gia' impaginato, e il
+            // server lo stampa con il browser di sistema: il PDF consegnato e'
+            // lo stesso documento che l'operatore ha appena guardato.
             const frame = document.getElementById('auditReportFrame');
             const doc = frame && frame.contentDocument ? frame.contentDocument : null;
-
-            const filename = (_currentReportFilename || 'compliance-report') + '.pdf';
-            const opt = {
-                margin: 0,
-                filename: filename,
-                image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: {
-                    scale: 2,
-                    useCORS: true,
-                    backgroundColor: '#ffffff',
-                    logging: false,
-                    scrollY: 0,
-                    scrollX: 0
-                },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-                pagebreak: { mode: 'avoid-all' }
-            };
-
-            if (frame && frame.contentWindow && typeof frame.contentWindow.downloadPdf === 'function') {
-                await frame.contentWindow.downloadPdf();
-                showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
-                return;
-            }
-
-            const reportEl = doc ? (doc.querySelector('.report-pages-container') || doc.body) : null;
-            if (reportEl) {
-                const origGap = reportEl.style.gap;
-                reportEl.style.gap = '0px';
-                try {
-                    await h2p().set(opt).from(reportEl).save();
-                    showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
-                } finally {
-                    reportEl.style.gap = origGap;
-                }
-            } else {
+            if (!doc) {
                 throw new Error(currentLang === 'en' ? 'Report content not found' : 'Contenuto del report non trovato');
             }
+
+            const res = await apiFetch('/api/netsec-audit/report/pdf', {
+                method: 'POST',
+                body: JSON.stringify({
+                    html: '<!doctype html>\n' + doc.documentElement.outerHTML,
+                    filename: _currentReportFilename || 'compliance-report'
+                })
+            });
+            if (!res || !res.ok) {
+                const detail = res ? ((await res.json().catch(() => ({}))).detail || res.status) : 'network';
+                throw new Error(String(detail));
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = (_currentReportFilename || 'compliance-report') + '.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast(currentLang === 'en' ? 'PDF downloaded successfully.' : 'PDF scaricato con successo.', 'info');
         } catch (e) {
             console.error('PDF export error:', e);
             showToast((currentLang === 'en' ? 'Failed to generate PDF: ' : 'Errore generazione PDF: ') + (e.message || e), 'error');

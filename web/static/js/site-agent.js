@@ -298,7 +298,9 @@
         }
     });
 
-    document.getElementById('agentControlModalBody')?.addEventListener('click', (e) => {
+    // Same id openAgentControlModal() fills: the delegated listener belongs on
+    // the real container, not on a wrapper that does not exist.
+    document.getElementById('agentControlBody')?.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
         if (!btn || !btn.dataset.siteId) return;
         const action = btn.dataset.action;

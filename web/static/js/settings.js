@@ -6,17 +6,23 @@
         const res = await apiFetch('/api/sites');
         if (!res || !res.ok) return;
         const data = await res.json();
-        renderSitesTable(data.sites || []);
+        await renderSitesTable(data.sites || []);
     }
 
-    function renderSitesTable(sites) {
+    async function renderSitesTable(sites) {
         const body = document.getElementById('sitesTableBody');
         if (!body) return;
         const L = i18n[currentLang];
+        // A jump row carries its device-default identity inline: the bastion
+        // login and the login used on the devices behind it are two different
+        // credentials, and there is no other screen to change the second one.
+        const identities = sites.some(s => s.mode === 'jump') ? await getIdentities() : [];
         body.innerHTML = sites.map(s => {
             const isCentral = s.id === 'central';
             const modeBadge = s.mode === 'agent'
                 ? '<span class="chip">SITE AGENT</span>'
+                : s.mode === 'jump'
+                ? '<span class="chip">JUMP (BASTION)</span>'
                 : '<span class="status ok"><span class="led led-success"></span>CENTRAL POLL</span>';
             const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : '—';
             const subnets = (s.subnets || []).map(escapeHtml).join(', ') || '—';
@@ -37,6 +43,23 @@
                 actions += `<button data-action="open-agent-control" data-site-id="${escapeHtml(s.id)}" style="color:var(--warning); background:none; border:none; cursor:pointer; margin-right:10px;" title="Pannello di controllo ed aggiornamento agente remoti"><i class="fa-solid fa-gears"></i> Gestione Agente</button>`;
                 actions += `<button data-action="regen-site-token" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-key"></i> ${L.btnRegenSiteToken}</button>`;
             }
+            if (s.mode === 'jump') {
+                // Two identities, two selects. One unlabelled dropdown next to
+                // "Test bastion" read as the bastion credential while it set
+                // the DEVICE one, so an operator could fix the login the test
+                // does not use and see the same refusal again — with no way to
+                // reach the bastion identity at all after site creation.
+                actions += `<span style="font-size:10px; color:var(--text-muted); margin-right:3px;">${escapeHtml(L.lblIdentityBastionShort)}</span>`;
+                // A select whose stored value matches no option silently
+                // displays the FIRST one, which reads as "configured" while
+                // the site still points at an identity that no longer exists.
+                const jumpKnown = identities.some(i => i.id === s.jump_identity);
+                const jumpMissing = jumpKnown ? '' : `<option value="" selected>${escapeHtml(L.optMissingIdentity)}</option>`;
+                actions += `<select data-action="set-site-jump-identity" data-site-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblJumpIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;">${jumpMissing}${identityOptions(identities, s.jump_identity || '')}</select>`;
+                actions += `<span style="font-size:10px; color:var(--text-muted); margin-right:3px;">${escapeHtml(L.lblIdentityDeviceShort)}</span>`;
+                actions += `<select data-action="set-site-device-identity" data-site-id="${escapeHtml(s.id)}" title="${escapeHtml(L.lblDeviceIdentity)}" style="margin-right:10px; padding:2px 6px; font-size:12px;"><option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>${identityOptions(identities, s.device_identity || '')}</select>`;
+                actions += `<button data-action="test-bastion" data-site-id="${escapeHtml(s.id)}" style="color:var(--primary); background:none; border:none; cursor:pointer; margin-right:10px;"><i class="fa-solid fa-plug-circle-check"></i> ${L.btnTestBastion}</button>`;
+            }
             if (!isCentral) {
                 actions += `<button data-action="delete-site" data-site-id="${escapeHtml(s.id)}" style="color:var(--danger); background:none; border:none; cursor:pointer;"><i class="fa-solid fa-trash-can"></i> ${L.btnDeleteSite}</button>`;
             } else {
@@ -54,20 +77,74 @@
         }).join('');
     }
 
+    // Toggles the bastion fields + limitation notice for the 'jump' mode, and
+    // (re)populates the identity select the first time it becomes visible.
+    async function onNewSiteModeChange() {
+        const mode = document.getElementById('newSiteMode').value;
+        const isJump = mode === 'jump';
+        const fields = document.getElementById('jumpFields');
+        const limits = document.getElementById('jumpLimits');
+        if (fields) fields.style.display = isJump ? 'grid' : 'none';
+        if (limits) limits.style.display = isJump ? 'block' : 'none';
+        if (isJump) await populateJumpIdentitySelect();
+    }
+
+    let identitiesCache = null;
+
+    async function getIdentities() {
+        if (identitiesCache) return identitiesCache;
+        const res = await apiFetch('/api/identities');
+        identitiesCache = (res && res.ok) ? (await res.json()).identities || [] : [];
+        return identitiesCache;
+    }
+
+    function identityOptions(identities, selected) {
+        return identities.map(i => `<option value="${escapeHtml(i.id)}"${
+            i.id === selected ? ' selected' : ''}>${escapeHtml(i.name)} (${
+            escapeHtml(i.username)})</option>`).join('');
+    }
+
+    async function populateJumpIdentitySelect() {
+        const sel = document.getElementById('newSiteJumpIdentity');
+        const dev = document.getElementById('newSiteDeviceIdentity');
+        if (!sel || sel.dataset.loaded) return;
+        const identities = await getIdentities();
+        sel.innerHTML = identityOptions(identities, null);
+        // The device default is optional: without it the devices behind the
+        // bastion fall back to the global admin credentials.
+        if (dev) {
+            const L = i18n[currentLang];
+            dev.innerHTML = `<option value="">${escapeHtml(L.optNoDeviceIdentity)}</option>`
+                + identityOptions(identities, null);
+        }
+        sel.dataset.loaded = '1';
+    }
+
     async function createSite() {
         const name = document.getElementById('newSiteName').value.trim();
         const mode = document.getElementById('newSiteMode').value;
         const subnets = document.getElementById('newSiteSubnets').value
             .split(',').map(x => x.trim()).filter(Boolean);
         if (!name) { alert(currentLang==='en' ? 'Site name required.' : 'Nome sede obbligatorio.'); return; }
+        const payload = { name, mode, subnets };
+        if (mode === 'jump') {
+            payload.jump_host = document.getElementById('newSiteJumpHost').value.trim();
+            payload.jump_port = parseInt(document.getElementById('newSiteJumpPort').value, 10) || 22;
+            payload.jump_identity = document.getElementById('newSiteJumpIdentity').value;
+            payload.device_identity = document.getElementById('newSiteDeviceIdentity').value;
+        }
         const res = await apiFetch('/api/sites', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, mode, subnets })
+            body: JSON.stringify(payload)
         });
         if (res && res.ok) {
             const data = await res.json();
             document.getElementById('newSiteName').value = '';
             document.getElementById('newSiteSubnets').value = '';
+            if (mode === 'jump') {
+                document.getElementById('newSiteJumpHost').value = '';
+                document.getElementById('newSiteJumpPort').value = '22';
+            }
             if (data.token) {
                 prompt(currentLang==='en' ? 'Site token (shown ONLY ONCE — copy it now and configure it in the agent):' : 'Token della sede (mostrato UNA SOLA VOLTA — copialo ora e configuralo nell\'agente):', data.token);
             }
@@ -88,6 +165,47 @@
             prompt(currentLang==='en' ? 'New token (shown ONLY ONCE):' : 'Nuovo token (mostrato UNA SOLA VOLTA):', data.token);
             loadSites();
         } else if (res) { const e = await res.json(); alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || '')); }
+    }
+
+    async function testBastion(id) {
+        const L = i18n[currentLang];
+        const res = await apiFetch('/api/sites/test-bastion', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id })
+        });
+        if (!res) return;
+        const data = await res.json();
+        if (!res.ok) { alert((L.lblError || 'Errore') + ': ' + (data.detail || '')); return; }
+        if (data.status === 'success') alert(L.msgBastionOk);
+        else if (data.status === 'auth_failed') alert(L.msgBastionAuthFailed + '\n\n' + (data.message || ''));
+        else alert(L.msgBastionUnreachable + '\n\n' + (data.message || ''));
+    }
+
+    async function setSiteJumpIdentity(id, identityId) {
+        // A jump site cannot exist without a bastion identity, so there is no
+        // empty option to send.
+        if (!identityId) { loadSites(); return; }
+        const res = await apiFetch('/api/sites/update', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, jump_identity: identityId })
+        });
+        if (res && !res.ok) {
+            const e = await res.json();
+            alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+        }
+        loadSites();
+    }
+
+    async function setSiteDeviceIdentity(id, identityId) {
+        const res = await apiFetch('/api/sites/update', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, device_identity: identityId })
+        });
+        if (res && !res.ok) {
+            const e = await res.json();
+            alert((currentLang==='en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            loadSites();
+        }
     }
 
     async function deleteSite(id) {
@@ -634,11 +752,17 @@
                 ? `${L.lblPingMonitorLastRun || 'Ultimo ciclo'}: ${lastRun}`
                 : (L.msgPingMonitorDisabled || 'Monitor ping disattivato.');
         }
-        const s = st.summary || { total: 0, up: 0, down: 0 };
+        // Three buckets, not two: a jump-site device is never pinged (the
+        // bastion tunnel carries no ICMP), so the backend reports it under
+        // summary.unknown. Rendering only up/down made those devices vanish
+        // from the panel with no explanation. Same vocabulary and lamp as the
+        // inventory KPI row for the state (invKpiUnknownLabel / led-discovered).
+        const s = st.summary || { total: 0, up: 0, down: 0, unknown: 0 };
         summaryEl.innerHTML = `
             <span class="chip">${escapeHtml(L.lblPingMonitorTotal || 'Dispositivi')}: ${s.total}</span>
             <span class="status ok"><span class="led led-success"></span>${escapeHtml(L.lblPingMonitorUp || 'Up')}: ${s.up}</span>
-            <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>`;
+            <span class="status bad"><span class="led led-danger"></span>${escapeHtml(L.lblPingMonitorDown || 'Down')}: ${s.down}</span>
+            <span class="status idle"><span class="led led-discovered"></span>${escapeHtml(L.invKpiUnknownLabel || 'Non misurabile')}: ${s.unknown || 0}</span>`;
     }
 
     // Delegated and static event listeners
@@ -672,6 +796,14 @@
         if (act === 'open-agent-control' && typeof openAgentControlModal === 'function') openAgentControlModal(siteId);
         else if (act === 'regen-site-token') regenSiteToken(siteId);
         else if (act === 'delete-site') deleteSite(siteId);
+        else if (act === 'test-bastion') testBastion(siteId);
+    });
+
+    document.getElementById('sitesTableBody')?.addEventListener('change', (e) => {
+        const sel = e.target.closest('[data-action="set-site-device-identity"]');
+        if (sel && sel.dataset.siteId) setSiteDeviceIdentity(sel.dataset.siteId, sel.value);
+        const jump = e.target.closest('[data-action="set-site-jump-identity"]');
+        if (jump && jump.dataset.siteId) setSiteJumpIdentity(jump.dataset.siteId, jump.value);
     });
 
     document.getElementById('usersTableBody')?.addEventListener('change', (e) => {
@@ -712,6 +844,7 @@
 
     document.getElementById('btnCreateUser')?.addEventListener('click', createUser);
     document.getElementById('btnCreateSite')?.addEventListener('click', createSite);
+    document.getElementById('newSiteMode')?.addEventListener('change', onNewSiteModeChange);
     document.getElementById('btnCopyMcpConfig')?.addEventListener('click', copyMcpConfig);
     document.getElementById('btnSaveMcpSettings')?.addEventListener('click', saveMcpSettings);
     document.getElementById('mcpPreviewToggle')?.addEventListener('change', (e) => {

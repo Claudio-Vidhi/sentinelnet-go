@@ -5,9 +5,46 @@
 
 // Mirror renderDeviceTable's canonical status mapping: status is on
 // globalVersions[device.IP].status, NOT on the device object itself.
+// Devices reachable only through an SSH bastion. They are excluded from the
+// online/attention counters on purpose (no ICMP crosses the tunnel, so any
+// up/down there would be invented), which used to make them vanish from Home
+// altogether. The status shown is the last SSH triage outcome, which is a real
+// measurement -- it went through the bastion and talked to the device.
+function renderBastionPanel(devices) {
+    const panel = document.getElementById('homeBastionPanel');
+    const body = document.getElementById('homeBastionBody');
+    if (!panel || !body) return;
+    if (!devices.length) { panel.style.display = 'none'; return; }
+    panel.style.display = '';
+    const L = i18n[currentLang];
+    const count = document.getElementById('homeBastionCount');
+    if (count) count.textContent = `${devices.length} ${L.homeBastionDevices}`;
+    body.innerHTML = devices.slice(0, 8).map(d => {
+        // scan.status here comes from the triage (update_version_inventory),
+        // never from a ping: the ping monitor reports 'unknown' for these.
+        const scan = globalVersions[d.IP] || {};
+        const triaged = scan.status && scan.status !== 'unknown';
+        const info = triaged ? homeStatusInfo(scan.status) : homeStatusInfo('unknown');
+        const label = triaged
+            ? (i18n[currentLang][info.key] || scan.status)
+            : L.homeBastionNeverTriaged;
+        const host = d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">&mdash;</span>';
+        return `<tr>
+            <td>${host}</td>
+            <td><code>${escapeHtml(d.IP || '')}</code></td>
+            <td><span class="badge">${escapeHtml(d.Site || 'central')}</span></td>
+            <td><span class="status ${info.cls}"><span class="led ${info.led}"></span>${escapeHtml(label)}</span></td>
+        </tr>`;
+    }).join('');
+}
+
 function homeStatusInfo(status) {
     if (status === 'online')      return { cls: 'ok',   led: 'led-success', key: 'homeStOnline' };
     if (status === 'auth_failed') return { cls: 'warn', led: 'led-warning', key: 'homeStAuth' };
+    // A jump-site device: the SSH bastion tunnel carries no ICMP, so this is
+    // not measurable, never a confirmed down. Reusing led-discovered (the
+    // existing "not confirmed" grey/dashed lamp) rather than the red fault lamp.
+    if (status === 'unknown')     return { cls: 'idle', led: 'led-discovered', key: 'homeStUnknown' };
     return { cls: 'bad', led: 'led-danger', key: 'homeStOffline' };
 }
 
@@ -36,7 +73,21 @@ async function loadHome() {
             if (pm.enabled && pm.devices && pm.devices.length) {
                 pm.devices.forEach(d => {
                     if (!globalVersions[d.ip]) globalVersions[d.ip] = {};
-                    globalVersions[d.ip].status = d.up ? 'online' : 'offline';
+                    // d.status is the tri-state the ping monitor already computed
+                    // server-side: for a jump-site device (bastion tunnel, no ICMP)
+                    // d.up is null and d.status is 'unknown' — never collapse that
+                    // to 'offline', it would report a false down.
+                    // 'unknown' from the monitor means "I could not measure
+                    // this" (jump site: no ICMP through the bastion), not "the
+                    // state is unknown". Writing it over a status the SSH
+                    // triage established would erase a real result with a
+                    // non-result, which is what made a triaged jump device go
+                    // back to an em dash on the next render.
+                    if (d.status === 'unknown') {
+                        if (!globalVersions[d.ip].status) globalVersions[d.ip].status = 'unknown';
+                    } else {
+                        globalVersions[d.ip].status = d.up ? 'online' : 'offline';
+                    }
                 });
                 // Keep the home tab live: re-poll at the monitor cadence.
                 // loadHome() is cheap here — globalDevices is cached, so
@@ -49,11 +100,27 @@ async function loadHome() {
     const devs = globalDevices || [];
 
     let online = 0;
+    let notMeasurable = 0;
     const attention = [];
+    // Out of the counters, but not out of sight: these get their own panel.
+    const viaBastion = [];
     devs.forEach(d => {
         const scan = globalVersions[d.IP] || {};
+        // A jump-site device has no measurable reachability: the bastion tunnel
+        // carries no ICMP. It is neither online nor something to act on, so it
+        // stays out of both counters and out of the percentage's denominator.
+        // Without this a customer whose whole estate sits behind one bastion
+        // read "Online: 0", "0% of the fleet", "Needs attention: 40 of 40",
+        // permanently — while the bays right below correctly said "not
+        // measurable". icmp_reachable comes from /api/local-devices, scan.status
+        // from the ping monitor; either one is enough to know.
+        if (d.icmp_reachable === false || scan.status === 'unknown') {
+            notMeasurable++;
+            viaBastion.push(d);
+            return;
+        }
         if (scan.status === 'online') online++;
-        else attention.push(d); // auth_failed / offline / unknown / missing
+        else attention.push(d); // auth_failed / offline / missing
     });
 
     const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -63,9 +130,14 @@ async function loadHome() {
 
     // Righe di contesto sotto ogni bay: un numero nudo non dice se sia molto.
     const L = i18n[currentLang];
-    const pct = devs.length ? Math.round((online / devs.length) * 100) : 0;
-    setText('homeStatOnline', `${pct}% ${L.homeOfFleet}`);
-    setText('homeStatAttention', `${L.homeOutOf} ${devs.length}`);
+    // The percentage is honest about what it can see: the denominator is the
+    // measurable part of the fleet, and when nothing is measurable there is no
+    // percentage to give, only the state itself.
+    const measurable = devs.length - notMeasurable;
+    setText('homeStatOnline', measurable
+        ? `${Math.round((online / measurable) * 100)}% ${L.homeOfFleet}`
+        : L.homeStUnknown);
+    setText('homeStatAttention', `${L.homeOutOf} ${measurable}`);
 
     // Cartiglio del disegno: revisione = istante dell'ultima lettura.
     setText('homeOnelineRev', new Date().toLocaleString(currentLang === 'en' ? 'en-GB' : 'it-IT'));
@@ -93,6 +165,8 @@ async function loadHome() {
         }
     }
 
+    renderBastionPanel(viaBastion);
+
     if (currentRole === 'admin') loadHomeAnomalies();
     else renderEventStripDenied();
 }
@@ -108,12 +182,16 @@ function renderFleetOneline(devs) {
     const bays = new Map();
     devs.forEach(d => {
         const tenant = (d.Group || '').trim() || L.homeBayUnassigned;
-        if (!bays.has(tenant)) bays.set(tenant, { total: 0, down: 0, warn: 0, idle: 0 });
+        if (!bays.has(tenant)) bays.set(tenant, { total: 0, down: 0, warn: 0, idle: 0, unknown: 0 });
         const b = bays.get(tenant);
         b.total++;
         const st = (globalVersions[d.IP] || {}).status;
         if (!st) b.idle++;                                   // mai interrogato
-        else if (st === 'offline' || st === 'unknown') b.down++;
+        // 'unknown': jump-site device, no ICMP through the bastion — not
+        // measurable, NOT a confirmed down. Its own bucket, not merged into
+        // 'down' (that painted a bastion-only tenant's bay red as an outage).
+        else if (st === 'unknown') b.unknown++;
+        else if (st === 'offline') b.down++;
         else if (st !== 'online') b.warn++;
     });
 
@@ -131,11 +209,15 @@ function renderFleetOneline(devs) {
     // Peggiore stato della bay:
     // - 'idle': nessun apparato della bay è mai stato scansionato
     // - 'down': TUTTI gli apparati della bay sono giù (interruttore aperto / irraggiungibile)
-    // - 'warn': solo ALCUNI apparati sono giù o in attenzione (degradato / attenzione)
+    // - 'unknown': TUTTI gli apparati non-idle della bay sono su un sito jump
+    //   (nessun ICMP attraverso il bastione) — non misurabile, MAI un'interruzione:
+    //   una sede raggiunta solo via bastione non deve sembrare un'interruzione.
+    // - 'warn': un mix di giù/attenzione/non misurabile (degradato / attenzione)
     // - 'up': tutti gli apparati operativi (eccitato)
     const state = b => (!b || !b.total || b.idle === b.total) ? 'idle'
                      : (b.down === b.total) ? 'down'
-                     : (b.down > 0 || b.warn > 0) ? 'warn'
+                     : (b.unknown === b.total) ? 'unknown'
+                     : (b.down > 0 || b.warn > 0 || b.unknown > 0) ? 'warn'
                      : 'up';
     let html = shown.map(([name, b]) => `
         <button type="button" class="oneline-bay" data-state="${state(b)}"
@@ -146,6 +228,7 @@ function renderFleetOneline(devs) {
             <span class="oneline-count">${b.total}</span>
             <span class="oneline-name">${escapeHtml(name)}</span>
             <span class="oneline-sub">${b.down ? escapeHtml(`${b.down} ${L.homeBayDown}`)
+                 : b.unknown ? escapeHtml(`${b.unknown} ${L.homeBayUnknown}`)
                  : (b.idle === b.total) ? escapeHtml(L.homeBayUnscanned)
                  : escapeHtml(L.homeBayAllUp)}</span>
           </span>
@@ -154,8 +237,9 @@ function renderFleetOneline(devs) {
     if (rest.length) {
         const agg = rest.reduce((a, [, b]) => ({
             total: a.total + b.total, down: a.down + b.down,
-            warn: a.warn + b.warn, idle: a.idle + b.idle
-        }), { total: 0, down: 0, warn: 0, idle: 0 });
+            warn: a.warn + b.warn, idle: a.idle + b.idle,
+            unknown: a.unknown + b.unknown
+        }), { total: 0, down: 0, warn: 0, idle: 0, unknown: 0 });
         html += `
         <button type="button" class="oneline-bay" data-state="${state(agg)}"
                 data-action="switch-tab" data-tab="tab-devices">
@@ -265,8 +349,14 @@ document.getElementById('homeAttentionBody')?.addEventListener('click', (e) => {
     }
 });
 
-document.getElementById('homeAnomSummary')?.addEventListener('click', (e) => {
+document.getElementById('homeAnomSummary')?.addEventListener('click', async (e) => {
     if (e.target.closest('[data-action="open-traffico-anomalies"]')) {
-        openTrafficoAnomalies();
+        // observability.js owns openTrafficoAnomalies and is lazy-loaded with
+        // the Flows tab. Calling it bare from Home was a ReferenceError until
+        // the user had opened Flows once, i.e. a silently dead button;
+        // switching tab first is what loads the module.
+        const nav = document.querySelector('[data-tabs="tab-flows"]');
+        await switchTab('tab-flows', nav || undefined);
+        window.openTrafficoAnomalies?.();
     }
 });

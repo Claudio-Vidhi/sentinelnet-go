@@ -22,11 +22,11 @@ async function populateIdentTenantOptions(selected) {
         const res = await apiFetch('/api/groups');
         if (res && res.ok) {
             const data = await res.json();
-            window.globalGroups = (data && data.groups) ? data.groups : (data || {});
+            globalGroups = (data && data.groups) ? data.groups : (data || {});
         }
     } catch (e) { /* fallback */ }
-    const fromGlobal = Object.keys(window.globalGroups || {});
-    const fromDevs = (window.globalDevices || []).map(d => d.Group).filter(Boolean);
+    const fromGlobal = Object.keys(globalGroups || {});
+    const fromDevs = (globalDevices || []).map(d => d.Group).filter(Boolean);
     const allTenants = [...new Set(['Generale', ...fromGlobal, ...fromDevs])].sort();
     if (typeof window.populateGenCfgTenants === 'function') window.populateGenCfgTenants();
 
@@ -358,7 +358,22 @@ function provInitToggles() {
     document.getElementById('provDeliveryMode').addEventListener('change', (e) => {
         document.getElementById('provSshFields').style.display = e.target.value === 'ssh' ? 'grid' : 'none';
         document.getElementById('provSerialFields').style.display = e.target.value === 'serial' ? 'grid' : 'none';
+        if (e.target.value === 'ssh') populateProvSiteSelect();
     });
+
+    // A day-0 device is not in the inventory yet, so the server cannot resolve
+    // its site from the target IP: inside a jump site the push would be dialled
+    // directly instead of through the bastion. The operator names the site here.
+    async function populateProvSiteSelect() {
+        const sel = document.getElementById('provSshSite');
+        if (!sel || sel.dataset.loaded) return;
+        const res = await apiFetch('/api/sites');
+        if (!res || !res.ok) return;
+        const sites = (await res.json()).sites || [];
+        sel.insertAdjacentHTML('beforeend', sites.map(st =>
+            `<option value="${escapeHtml(st.id)}">${escapeHtml(st.name)}</option>`).join(''));
+        sel.dataset.loaded = '1';
+    }
     document.getElementById('btnProvGenerate').addEventListener('click', async () => {
         const { payload, base } = provPayloadAndBase();
         const res = await apiFetch(`${base}/generate`, {
@@ -393,6 +408,7 @@ function provInitToggles() {
             ssh_port: parseInt(document.getElementById('provSshPort').value, 10) || 22,
             ssh_username: document.getElementById('provSshUser').value.trim(),
             ssh_password: document.getElementById('provSshPass').value,
+            ssh_site: document.getElementById('provSshSite').value,
         });
         if (!provVendorIsFgt()) {
             payload.ssh_secret = document.getElementById('provSshSecret').value;
@@ -482,8 +498,30 @@ function updateDevSecretField() {
     if (hint) hint.style.display = vendor === 'linux' ? 'block' : 'none';
 }
 
+async function populateSiteOptions(preserve) {
+    const siteSelect = document.getElementById('devSiteSelect');
+    if (!siteSelect) return;
+    const current = preserve || siteSelect.value || 'central';
+    let sites = [];
+    try {
+        const res = await apiFetch('/api/sites');
+        if (res && res.ok) {
+            sites = (await res.json()).sites || [];
+        }
+    } catch (e) {}
+    if (!sites.length) {
+        sites = [{ id: 'central', name: 'Central', mode: 'central' }];
+    }
+    siteSelect.innerHTML = sites.map(s => {
+        const modeLabel = s.mode === 'jump' ? ' [Jump/Bastion]' : (s.mode === 'agent' ? ' [Agent]' : '');
+        return `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name || s.id)}${escapeHtml(modeLabel)} (${escapeHtml(s.id)})</option>`;
+    }).join('');
+    siteSelect.value = Array.from(siteSelect.options).some(o => o.value === current) ? current : 'central';
+}
+window.populateSiteOptions = populateSiteOptions;
+
 // Popola le select del form di Provisioning Apparato (devVendor,
-// scanVerifyVendorSelect, devGroupSelect). Estratto da appInit() perché ora
+// scanVerifyVendorSelect, devGroupSelect, devSiteSelect). Estratto da appInit() perché ora
 // serve anche quando si apre la tab dedicata tab-provisioning senza passare da
 // un reload completo.
 function populateProvisioningFormSelects() {
@@ -500,6 +538,7 @@ function populateProvisioningFormSelects() {
             `<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`
         ).join('');
     }
+    populateSiteOptions();
     if (typeof window.populateGenCfgTenants === 'function') {
         window.populateGenCfgTenants();
     }
@@ -510,10 +549,11 @@ async function loadProvisioningTab() {
         const res = await apiFetch('/api/groups');
         if (res && res.ok) {
             const data = await res.json();
-            window.globalGroups = (data && data.groups) ? data.groups : (data || {});
+            globalGroups = (data && data.groups) ? data.groups : (data || {});
         }
     } catch (e) {}
     populateProvisioningFormSelects();
+    await populateSiteOptions();
     await refreshIdentityOptions();
     renderIdentitiesPanel();
 }
@@ -537,7 +577,10 @@ function assignIdentityToDevices(identityId) {
         if (allowedTenants.includes('all')) allowedTenants = null;
     }
 
-    const devices = (window.globalDevices || []).filter(d => {
+    // globalDevices is a 'let' in core.js: it lives in the global lexical
+    // scope, not on window. Reading it as window.globalDevices always returned
+    // undefined and left the device list empty for every tenant.
+    const devices = (globalDevices || []).filter(d => {
         if (allowedTenants && allowedTenants.length) return allowedTenants.includes(d.Group);
         return currentTenant === 'all' || d.Group === currentTenant;
     });

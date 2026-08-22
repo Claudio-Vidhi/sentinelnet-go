@@ -286,6 +286,7 @@ if (document.readyState === 'loading') {
 function expandIface(name) {
     if (!name) return '';
     name = String(name).trim();
+    /** @type {[RegExp, string][]} */
     const abbr = [
         [/^(?:GigabitEthernet|Gi)(?=\d)/i, 'GigabitEthernet'],
         [/^(?:TenGigabitEthernet|TenGigE|Te|XGi|10Ge)(?=\d)/i, 'TenGigabitEthernet'],
@@ -782,13 +783,23 @@ const LAZY_TAB_SCRIPTS = {
     'tab-flows': ['/static/js/flow-analytics.js', '/static/js/observability.js'],
     'tab-config': ['/static/js/config-analyzer.js'],
     'tab-ai': ['/static/js/ai.js'],
+    // The AI config generator is a panel of the Provisioner sub-tab, so its
+    // module has to load there too, not only on the AI tab.
+    'tab-provisioner': ['/static/js/ai.js'],
     'tab-fortigate': ['/static/js/fortigate-management.js'],
     'tab-wlc': ['/static/js/wlc.js'],
-    'tab-audit-checklist': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/audit_checklist.js'],
+    // settings.js owns the CRUD of four tabs, not just Settings: opening any of
+    // the other three cold left every control on it dead and its table empty.
     'tab-settings': ['/static/js/settings.js', '/static/js/observability.js'],
+    'tab-sites': ['/static/js/settings.js'],
+    'tab-users': ['/static/js/settings.js'],
+    'tab-mcp': ['/static/js/settings.js'],
     'tab-incidents': ['/static/js/incidents.js'],
     'tab-redundancy': ['/static/js/redundancy.js'],
-    'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js'],
+    // The Firewall Audit Checklist is a sub-tab of NetSec Audit: its module
+    // has to load together with the tab that contains it.
+    'tab-netsec-audit': ['/static/vendor/html2pdf/html2pdf.bundle.min.js', '/static/js/netsec-audit.js', '/static/js/audit_checklist.js'],
+    'tab-policy-test': ['/static/js/policy-test.js'],
 };
 
 const _lazyLoaded = new Set();
@@ -876,13 +887,13 @@ async function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-endpoint') locSwitchView(_locView);
     else if (tabId === 'tab-config') loadConfigAnalyzer();
     else if (tabId === 'tab-ai') loadAiTab();
+    else if (tabId === 'tab-import' && typeof loadImportSiteIds === 'function') loadImportSiteIds();
     else if (tabId === 'tab-users') loadUsers();
     else if (tabId === 'tab-sites') loadSites();
     else if (tabId === 'tab-mcp') loadMcpTab();
     else if (tabId === 'tab-mcp-client') loadMcpClientTab();
     else if (tabId === 'tab-fortigate') loadFgtTab();
     else if (tabId === 'tab-wlc' && typeof loadWlcTab === 'function') loadWlcTab();
-    else if (tabId === 'tab-audit-checklist') loadAuditChecklistTab();
     else if (tabId === 'tab-settings') loadAppSettings();
     // Queste tre tab prima si inizializzavano con una seconda chiamata
     // nell'onclick del pulsante nav; ora il dispatch e' unico e arriva
@@ -891,6 +902,7 @@ async function switchTab(tabId, clickedBtn) {
     else if (tabId === 'tab-incidents') loadIncidentsTab();
     else if (tabId === 'tab-redundancy') loadRedundancyTab();
     else if (tabId === 'tab-netsec-audit') loadNetSecAuditTab();
+    else if (tabId === 'tab-policy-test') loadPolicyTestTab();
 }
 
 // --- FLUSSI LIVE (fase 5): top talker + anomalie correlate -------------
@@ -1015,6 +1027,24 @@ function renderIdentitiesPanel() {
 
 // ===== Port Config Modal (promosso da static/js/topology.js: usato anche
 // dal tab MAC-tracker/ARP inline e da static/js/config-analyzer.js) =====
+// Espande le abbreviazioni comuni delle interfacce ('Gi1/0/5' -> 'GigabitEthernet1/0/5').
+// Speculare a expand_iface() di mac_collector.py: tenerli allineati.
+function expandIface(name) {
+    if (!name) return '';
+    name = String(name).trim();
+    /** @type {[RegExp, string][]} */
+    const abbr = [
+        [/^Gi(?=\d)/, 'GigabitEthernet'], [/^Te(?=\d)/, 'TenGigabitEthernet'],
+        [/^Fo(?=\d)/, 'FortyGigE'], [/^Twe(?=\d)/, 'TwentyFiveGigE'],
+        [/^Hu(?=\d)/, 'HundredGigE'], [/^Fa(?=\d)/, 'FastEthernet'],
+        [/^Eth(?=\d)/, 'Ethernet'], [/^Et(?=\d)/, 'Ethernet'], [/^Po(?=\d)/, 'Port-channel'],
+    ];
+    for (const [pat, full] of abbr) {
+        if (pat.test(name)) return name.replace(pat, full);
+    }
+    return name;
+}
+
 // Deep-link verso il Config Analyzer (impostati da showPortConfig, letti da renderCaResults).
 let caFocusIp = null;
 let caFocusPort = null;
@@ -1135,7 +1165,9 @@ document.addEventListener('toggle', function(e) {
     }
 }, true);
 
-document.getElementById('identitiesList')?.addEventListener('click', (e) => {
+// The <tbody> is the container renderIdentitiesPanel() fills: bind the
+// delegated listener here, not to a wrapper that does not exist.
+document.getElementById('identitiesTableBody')?.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-action]');
     if (!btn || !btn.dataset.id) return;
     const act = btn.dataset.action;

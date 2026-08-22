@@ -6,11 +6,11 @@
 // _scanJobInterval, pingInProgress) vivono qui perche' usati solo da questo
 // modulo.
 //
-// promoteDevice (Pannello Dispositivi & Categorie / mappa di rete) e
-// updateTopologyMapNodeStatus (overlay Visio) restano inline in dashboard.html:
-// appartengono alla tab di mappa/topologia, non ancora estratta -- vengono
-// richiamati da qui via riferimento cross-modulo a runtime (funzione-corpo),
-// il che e' consentito dalla regola di caricamento.
+// updateTopologyMapNodeStatus (Visio overlay) belongs to topology.js, which
+// core.js lazy-loads only for the map and categories tabs. Calling it bare
+// from here is a ReferenceError whenever the user has not opened one of those
+// tabs first, so every call goes through setMapNodeStatus below, which treats
+// the map overlay as optional. Do not "simplify" it back to a direct call.
 
     // Globals di stato per triage/scan/device-edit, scoped a questo modulo.
     let isTriagePolling = false;
@@ -90,9 +90,27 @@
 
     // KPI row sopra la tabella inventario: conteggi sull'intera flotta (non filtrati
     // da ricerca/tenant), stessa mappatura stato->led usata per le righe della tabella.
+    // A jump-site device has no ICMP, but the SSH triage does reach it through
+    // the bastion and its outcome is persisted (detected_versions, written by
+    // update_version_inventory). So "not measurable" applies only until that
+    // outcome exists: showing the em dash regardless threw the triage result
+    // away on every re-render, and the ONLINE the triage had just painted
+    // vanished as soon as the user left the tab and came back.
+    function jumpStatusIsUnmeasurable(d) {
+        if (d.icmp_reachable !== false) return false;
+        const st = (globalVersions[d.IP] || {}).status;
+        return !st || st === 'unknown';
+    }
+
     function updateInventoryKpis() {
-        let online = 0, offline = 0, authFailed = 0;
+        let online = 0, offline = 0, authFailed = 0, unknown = 0;
         (globalDevices || []).forEach(d => {
+            // Jump site: same "not measurable" bucket as the row's em dash
+            // (icmp_reachable is set per-device by /api/local-devices, Task 4's
+            // has_direct_path). Without this branch a jump-site device
+            // that has never been triaged falls into `else offline++` and the
+            // "Offline: N" tile contradicts the row directly below it.
+            if (jumpStatusIsUnmeasurable(d)) { unknown++; return; }
             const scan = globalVersions[d.IP] || {};
             if (scan.status === 'online') online++;
             else if (scan.status === 'auth_failed') authFailed++;
@@ -102,10 +120,17 @@
         setText('invKpiOnline', online);
         setText('invKpiOffline', offline);
         setText('invKpiAuthFailed', authFailed);
+        setText('invKpiUnknown', unknown);
     }
 
     function renderDeviceTable() {
         updateInventoryKpis();
+
+        // The Sede column needs the site list, and every caller of this
+        // function is synchronous. Fetch it once in the background and repaint
+        // when it lands; until then each row offers only its own site, so the
+        // table is never blocked on the request.
+        if (_sitesCache === null) loadDeviceSites().then(renderDeviceTable);
 
         const filterSelect  = document.getElementById('filterGroupSelect');
         const selectedGroup = filterSelect ? filterSelect.value : 'all';
@@ -133,6 +158,19 @@
             if (scan.status === "online")           ledClass = "led-online";
             else if (scan.status === "auth_failed") ledClass = "led-auth_failed";
 
+            // Jump site: ICMP cannot cross the bastion tunnel, so any "offline"
+            // here would be a ping that never ran, not a real down (Task 4's
+            // has_direct_path, surfaced per-device as icmp_reachable by
+            // /api/local-devices). Show the same "not measurable" em dash used
+            // elsewhere instead of a misleading led.
+            const isJumpUnmeasurable = jumpStatusIsUnmeasurable(d);
+
+            const siteOptions = (current) => (_sitesCache || []).map(st => {
+                const mode = st.mode === 'jump' ? ' [bastion]' : (st.mode === 'agent' ? ' [agent]' : '');
+                return `<option value="${escapeHtml(st.id)}" ${st.id === current ? 'selected' : ''}>${
+                    escapeHtml(st.name || st.id)}${escapeHtml(mode)}</option>`;
+            }).join('') || `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>`;
+
             const groupOptions = Object.keys(globalGroups).map(g =>
                 `<option value="${escapeHtml(g)}" ${g === d.Group ? "selected" : ""}>${escapeHtml(g)}</option>`
             ).join("");
@@ -148,10 +186,12 @@
 
             devBody.innerHTML += `<tr>
                 <td>
-                  <span class="led-container">
+                  ${isJumpUnmeasurable
+                    ? `<span class="led-container" title="${escapeHtml(i18n[currentLang].jumpLimitsPing)}">—</span>`
+                    : `<span class="led-container">
                     <span class="led ${ledClass}"></span>
                     ${scan.status.toUpperCase()}
-                  </span>
+                  </span>`}
                 </td>
                 <td>
                   <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
@@ -171,7 +211,18 @@
                     </select>`}
                   </div>
                 </td>
-                <td><span class="badge" style="background:var(--surface-3); color:var(--text-muted);">${escapeHtml(d.Site || 'central')}</span></td>
+                <td>${isViewer
+                  ? `<span class="badge" style="background:var(--surface-3); color:var(--text-muted);">${escapeHtml(d.Site || 'central')}</span>`
+                  : `<select
+                      data-action="reassign-device-site"
+                      data-ip="${escapeHtml(d.IP)}"
+                      title="${currentLang==='en'?'Move to another site (changes how the device is reached)':"Sposta in un'altra sede (cambia come si raggiunge l'apparato)"}"
+                      style="font-size:11px; padding:3px 6px; border-radius:0;
+                             border:1px solid var(--border); background:var(--surface-3);
+                             color:var(--text-muted); cursor:pointer; outline:none;
+                             max-width:130px; transition:var(--transition);">
+                      ${siteOptions(d.Site || 'central')}
+                    </select>`}</td>
                 <td style="font-family:monospace; font-size:12px; white-space:nowrap;">
                   ${d.Hostname ? escapeHtml(d.Hostname) : '<span style="color:var(--text-muted)">—</span>'}
                   ${isViewer ? '' : `<button data-action="rename-device" data-ip="${escapeHtml(d.IP)}"
@@ -259,6 +310,11 @@
     });
 
     document.getElementById('deviceTableBody')?.addEventListener('change', (e) => {
+        const siteSel = e.target.closest('select[data-action="reassign-device-site"]');
+        if (siteSel && siteSel.dataset.ip) {
+            reassignDeviceSite(siteSel.dataset.ip, siteSel.value, siteSel);
+            return;
+        }
         const sel = e.target.closest('select[data-action="reassign-device"]');
         if (sel && sel.dataset.ip) {
             reassignDevice(sel.dataset.ip, sel.value, sel);
@@ -379,6 +435,7 @@
     }
 
     document.getElementById('btnSaveDevice').addEventListener('click', async () => {
+        const siteSel = document.getElementById('devSiteSelect');
         const payload = {
             ip: document.getElementById('devIp').value.trim(),
             vendor: document.getElementById('devVendor').value,
@@ -387,6 +444,7 @@
             password: document.getElementById('devPass').value,
             enable_secret: document.getElementById('devSecret').value,
             group: document.getElementById('devGroupSelect').value,
+            site: (siteSel && siteSel.value) ? siteSel.value : 'central',
             transports: readTransportsForm()
         };
 
@@ -433,6 +491,14 @@
         switchTab('tab-provisioning');
 
         document.getElementById('devGroupSelect').value = dev.Group || 'Generale';
+        const siteSel = document.getElementById('devSiteSelect');
+        if (siteSel) {
+            if (typeof populateSiteOptions === 'function') {
+                await populateSiteOptions(dev.Site || 'central');
+            } else {
+                siteSel.value = dev.Site || 'central';
+            }
+        }
         const ipInput = document.getElementById('devIp');
         ipInput.value = dev.IP;
         ipInput.readOnly = true;
@@ -498,6 +564,8 @@
         ipInput.readOnly = false;
         ipInput.style.opacity = '';
         document.getElementById('devProfile').value = 'default';
+        const siteSelReset = document.getElementById('devSiteSelect');
+        if (siteSelReset) siteSelReset.value = 'central';
         setTransportsForm(null, 22);
         document.getElementById('customCredsForm').style.display = 'none';
         document.getElementById('devUser').value = '';
@@ -1408,8 +1476,90 @@
         }
     }
 
+    // --- CUSTOMIZABLE CSV EXPORT ---
+
+    // Columns come from /api/export/devices/columns: the registry lives in the
+    // backend, so no second copy here that could drift away from it.
+    let exportColumns = [];
+    const EXPORT_PREFS_KEY = 'sentinelnet.exportPrefs';
+
+    function readExportPrefs() {
+        try { return JSON.parse(localStorage.getItem(EXPORT_PREFS_KEY)) || {}; }
+        catch (e) { return {}; }
+    }
+
+    function checkedValues(containerId) {
+        return Array.from(document.querySelectorAll(`#${containerId} input:checked`))
+            .map(el => el.value);
+    }
+
+    function renderCheckList(containerId, values, checked) {
+        const box = document.getElementById(containerId);
+        const want = new Set(checked || []);
+        box.innerHTML = values.map(v => `
+            <label style="display:flex; align-items:center; gap:6px; font-size:12px; padding:2px 0; cursor:pointer;">
+              <input type="checkbox" value="${escapeHtml(v.value)}" ${want.has(v.value) ? 'checked' : ''}
+                     style="width:14px; height:14px; accent-color:var(--primary); cursor:pointer;">
+              <span>${escapeHtml(v.label)}</span>
+            </label>`).join('');
+    }
+
+    function updateMemberHint() {
+        const perMember = new Set(exportColumns.filter(c => c.per_member).map(c => c.key));
+        const hit = checkedValues('exportColumnList').some(k => perMember.has(k));
+        document.getElementById('exportMemberHint').style.display = hit ? 'block' : 'none';
+    }
+
+    async function openDeviceExportModal() {
+        if (!exportColumns.length) {
+            const res = await apiFetch("/api/export/devices/columns");
+            if (!res || !res.ok) {
+                alert(i18n[currentLang].alertExportError);
+                return;
+            }
+            const data = await res.json();
+            exportColumns = data.columns;
+            const prefs = readExportPrefs();
+            if (!prefs.columns) prefs.columns = data.default;
+            localStorage.setItem(EXPORT_PREFS_KEY, JSON.stringify(prefs));
+        }
+        const prefs = readExportPrefs();
+        const uniq = (key) => Array.from(new Set(globalDevices.map(d => d[key]).filter(Boolean)))
+            .sort().map(v => ({ value: v, label: v }));
+
+        renderCheckList('exportFilterGroups', uniq('Group'), prefs.groups);
+        renderCheckList('exportFilterSites', uniq('Site'), prefs.sites);
+        renderCheckList('exportFilterVendors', uniq('Vendor'), prefs.vendors);
+        renderCheckList('exportFilterRedundancy', [
+            { value: 'standalone', label: 'standalone' },
+            { value: 'stack', label: 'stack' },
+            { value: 'ha_pair', label: 'ha_pair' },
+            { value: 'sso', label: 'sso' },
+        ], prefs.redundancy);
+        renderCheckList('exportColumnList',
+            exportColumns.map(c => ({ value: c.key, label: c.header + (c.per_member ? ' *' : '') })),
+            prefs.columns);
+        updateMemberHint();
+        document.getElementById('deviceExportModal').style.display = 'flex';
+    }
+
     async function exportDeviceCsv() {
-        const res = await apiFetch("/api/export/devices");
+        const prefs = {
+            groups: checkedValues('exportFilterGroups'),
+            sites: checkedValues('exportFilterSites'),
+            vendors: checkedValues('exportFilterVendors'),
+            redundancy: checkedValues('exportFilterRedundancy'),
+            columns: checkedValues('exportColumnList'),
+        };
+        if (!prefs.columns.length) {
+            alert(i18n[currentLang].alertExportNoColumns);
+            return;
+        }
+        localStorage.setItem(EXPORT_PREFS_KEY, JSON.stringify(prefs));
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(prefs)) if (v.length) qs.set(k, v.join(','));
+
+        const res = await apiFetch("/api/export/devices?" + qs.toString());
         if (!res || !res.ok) {
             alert(i18n[currentLang].alertExportError);
             return;
@@ -1421,6 +1571,7 @@
         a.download = "sentinelnet-devices-" + new Date().toISOString().slice(0,10) + ".csv";
         a.click();
         URL.revokeObjectURL(url);
+        document.getElementById('deviceExportModal').style.display = 'none';
     }
 
     // --- CSV UPLOAD ---
@@ -1436,6 +1587,24 @@
         '198.51.100.1,manager,Pwd456!,secret,switch-02,Tenant_Roma,sede-roma,hpe',
         ''
     ].join('\n');
+
+    // The Site column has to carry the site id, not its name, and that id is a
+    // slug the operator never typed. Showing the real ones next to the rule
+    // saves a trip to the Sites tab. If the call fails the row stays hidden and
+    // the written rule above still stands.
+    async function loadImportSiteIds() {
+        const box = document.getElementById('importSiteIds');
+        const list = document.getElementById('importSiteIdsList');
+        if (!box || !list) return;
+        const res = await apiFetch('/api/sites');
+        if (!res || !res.ok) return;
+        const sites = (await res.json()).sites || [];
+        if (!sites.length) return;
+        list.innerHTML = sites.map(s =>
+            `<code style="margin-right:6px;">${escapeHtml(s.id)}</code>`).join('');
+        box.style.display = 'block';
+    }
+    window.loadImportSiteIds = loadImportSiteIds;
 
     const btnTemplate = document.getElementById('btnDownloadCsvTemplate');
     if (btnTemplate) {
@@ -1547,6 +1716,44 @@
         reader.readAsText(file);
     });
 
+    // Sites for the inventory's Sede column. Cached: the list changes only when
+    // an admin edits it in the Sedi tab, and renderDevices runs on every poll.
+    let _sitesCache = null;
+
+    async function loadDeviceSites() {
+        if (_sitesCache) return _sitesCache;
+        const res = await apiFetch('/api/sites');
+        _sitesCache = (res && res.ok) ? (await res.json()).sites || [] : [];
+        return _sitesCache;
+    }
+
+    async function reassignDeviceSite(ip, newSite, selectEl) {
+        const dev = globalDevices.find(d => d.IP === ip);
+        if (!dev || newSite === (dev.Site || 'central')) return;
+        const previous = dev.Site || 'central';
+        selectEl.disabled = true;
+        try {
+            const res = await apiFetch('/api/reassign-device-site', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ip, new_site: newSite })
+            });
+            if (res && res.ok) {
+                dev.Site = newSite;
+                // The site decides HOW the device is reached, so the row's
+                // reachability semantics change with it: a jump site has no
+                // ICMP. Re-fetch rather than guess the new state here.
+                appInit();
+            } else {
+                selectEl.value = previous;
+                const e = res ? await res.json() : {};
+                alert((currentLang === 'en' ? 'Error: ' : 'Errore: ') + (e.detail || ''));
+            }
+        } finally {
+            selectEl.disabled = false;
+        }
+    }
+
     async function reassignDevice(ip, newGroup, selectEl) {
         const dev = globalDevices.find(d => d.IP === ip);
         const originalGroup = dev?.Group;
@@ -1589,6 +1796,15 @@
         selectEl.disabled = false;
     }
 
+    // topology.js is lazy-loaded only for the map/categories tabs (see
+    // LAZY_TAB_SCRIPTS in core.js), so on the devices tab the identifier is
+    // simply not there. Calling it bare threw a ReferenceError that aborted
+    // the caller mid-way: a successful triage was repainted OFFLINE by its own
+    // catch, and the button was left spinning forever.
+    function setMapNodeStatus(ip, status) {
+        window.updateTopologyMapNodeStatus?.(ip, status);
+    }
+
     let pingInProgress = false;
 
     async function pingSingleDevice(ip, btnEl) {
@@ -1604,28 +1820,45 @@
             const res = await apiFetch(`/api/ping/${ip}`);
             if (res && res.ok) {
                 const data = await res.json();
-                const statusTxt = data.reachable ? "ONLINE" : "OFFLINE";
-                if (led) {
-                    led.className = data.reachable ? "led led-online" : "led led-offline";
-                }
-                if (ledContainer) {
-                    Array.from(ledContainer.childNodes)
-                        .filter(n => n.nodeType === Node.TEXT_NODE)
-                        .forEach(n => n.remove());
-                    ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
-                }
+                // null = not measurable (jump site: ICMP cannot cross the
+                // bastion tunnel, see routers/triage.py's ping_single). Show
+                // the same em dash the row already uses on load, not a false
+                // "OFFLINE" from a ping that never ran.
+                if (data.reachable === null) {
+                    if (led) led.className = "led";
+                    if (ledContainer) {
+                        ledContainer.title = i18n[currentLang].jumpLimitsPing;
+                        Array.from(ledContainer.childNodes)
+                            .filter(n => n.nodeType === Node.TEXT_NODE)
+                            .forEach(n => n.remove());
+                        ledContainer.appendChild(document.createTextNode('—'));
+                    }
+                    if (globalVersions[ip]) globalVersions[ip].status = "unknown";
+                    setMapNodeStatus(ip, "unknown");
+                } else {
+                    const statusTxt = data.reachable ? "ONLINE" : "OFFLINE";
+                    if (led) {
+                        led.className = data.reachable ? "led led-online" : "led led-offline";
+                    }
+                    if (ledContainer) {
+                        Array.from(ledContainer.childNodes)
+                            .filter(n => n.nodeType === Node.TEXT_NODE)
+                            .forEach(n => n.remove());
+                        ledContainer.appendChild(document.createTextNode(` ${statusTxt}`));
+                    }
 
-                // Update globalVersions cache
-                if (!globalVersions[ip]) {
-                    globalVersions[ip] = {
-                        version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato",
-                        vendor: "cisco"
-                    };
-                }
-                globalVersions[ip].status = data.reachable ? "online" : "offline";
+                    // Update globalVersions cache
+                    if (!globalVersions[ip]) {
+                        globalVersions[ip] = {
+                            version: currentLang === 'en' ? "Not Scanned" : "Non Scansionato",
+                            vendor: "cisco"
+                        };
+                    }
+                    globalVersions[ip].status = data.reachable ? "online" : "offline";
 
-                // Update map node status
-                updateTopologyMapNodeStatus(ip, data.reachable ? "online" : "offline");
+                    // Update map node status
+                    setMapNodeStatus(ip, data.reachable ? "online" : "offline");
+                }
             }
         } catch(e) {}
 
@@ -1672,7 +1905,7 @@
                     const dev = globalDevices.find(d => d.IP === ip);
                     if (dev && data.hostname) dev.Hostname = data.hostname;
 
-                    updateTopologyMapNodeStatus(ip, "online");
+                    setMapNodeStatus(ip, "online");
 
                 } else {
                     if (led) led.className = "led led-offline";
@@ -1685,7 +1918,7 @@
                     if (globalVersions[ip]) {
                         globalVersions[ip].status = "offline";
                     }
-                    updateTopologyMapNodeStatus(ip, "offline");
+                    setMapNodeStatus(ip, "offline");
                     const msgDetail = data.message || (currentLang === 'en' ? "Unknown error" : "Errore sconosciuto");
                     alert(`${i18n[currentLang].alertTriageFailed}${msgDetail}`);
                 }
@@ -1701,11 +1934,11 @@
             if (globalVersions[ip]) {
                 globalVersions[ip].status = "offline";
             }
-            updateTopologyMapNodeStatus(ip, "offline");
+            setMapNodeStatus(ip, "offline");
+        } finally {
+            btnEl.disabled = false;
+            btnEl.innerHTML = '<i class="fa-solid fa-bolt-lightning"></i>';
         }
-
-        btnEl.disabled = false;
-        btnEl.innerHTML = '<i class="fa-solid fa-bolt-lightning"></i>';
     }
 
     async function runPingCheck() {
@@ -1750,11 +1983,27 @@
             const ledContainer = row.cells[0].querySelector(".led-container");
             if (!ledContainer) return;
 
-            const alive     = results[ip];
+            const alive = results[ip];
+            const led = ledContainer.querySelector(".led");
+
+            // null = not measurable (jump site: ICMP cannot cross the bastion
+            // tunnel, see routers/triage.py's ping_check) — same em dash the
+            // row already uses on load, not a false "OFFLINE".
+            if (alive === null) {
+                if (led) led.className = "led";
+                ledContainer.title = i18n[currentLang].jumpLimitsPing;
+                Array.from(ledContainer.childNodes)
+                    .filter(n => n.nodeType === Node.TEXT_NODE)
+                    .forEach(n => n.remove());
+                ledContainer.appendChild(document.createTextNode('—'));
+                if (globalVersions[ip]) globalVersions[ip].status = "unknown";
+                setMapNodeStatus(ip, "unknown");
+                return;
+            }
+
             const ledClass  = alive ? "led-online" : "led-offline";
             const statusTxt = alive ? "ONLINE" : "OFFLINE";
 
-            const led = ledContainer.querySelector(".led");
             if (led) led.className = `led ${ledClass}`;
 
             Array.from(ledContainer.childNodes)
@@ -1772,7 +2021,7 @@
             globalVersions[ip].status = alive ? "online" : "offline";
 
             // Update map node status
-            updateTopologyMapNodeStatus(ip, alive ? "online" : "offline");
+            setMapNodeStatus(ip, alive ? "online" : "offline");
         });
     }
 
@@ -1796,7 +2045,20 @@
     document.getElementById('btnBulkCommand')?.addEventListener('click', () => {
         if (typeof openBulkCommandModal === 'function') openBulkCommandModal();
     });
-    document.getElementById('btnExportDevices')?.addEventListener('click', exportDeviceCsv);
+    document.getElementById('btnExportDevices')?.addEventListener('click', openDeviceExportModal);
+    document.getElementById('btnRunDeviceExport')?.addEventListener('click', exportDeviceCsv);
+    document.getElementById('exportColumnList')?.addEventListener('change', updateMemberHint);
+    document.getElementById('btnExportColsToggle')?.addEventListener('click', () => {
+        const boxes = Array.from(document.querySelectorAll('#exportColumnList input'));
+        const turnOn = boxes.some(b => !b.checked);
+        boxes.forEach(b => { b.checked = turnOn; });
+        updateMemberHint();
+    });
+    document.getElementById('deviceExportModal')?.addEventListener('click', (e) => {
+        if (e.target.id === 'deviceExportModal' || e.target.closest('#btnCloseDeviceExport')) {
+            document.getElementById('deviceExportModal').style.display = 'none';
+        }
+    });
     document.getElementById('btnCancelEditDevice')?.addEventListener('click', resetDeviceForm);
     document.getElementById('btnAddVendor')?.addEventListener('click', addVendor);
 
