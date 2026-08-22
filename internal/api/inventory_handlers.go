@@ -205,6 +205,66 @@ func (a *App) handleReassignDevice(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
+type reassignSiteReq struct {
+	IP      string `json:"ip"`
+	NewSite string `json:"new_site"`
+}
+
+func (a *App) handleReassignDeviceSite(w http.ResponseWriter, r *http.Request) {
+	var req reassignSiteReq
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, http.StatusBadRequest, "payload non valido")
+		return
+	}
+	if !a.deviceIPInScope(w, r, req.IP) {
+		return
+	}
+	if req.NewSite != "" && req.NewSite != "central" {
+		site, err := a.store.GetSite(req.NewSite)
+		if err != nil || site == nil {
+			writeErr(w, http.StatusBadRequest, "sede non esistente")
+			return
+		}
+	}
+	if err := a.store.SetDeviceSite(req.IP, req.NewSite); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "success", "message": "Dispositivo spostato nella sede"})
+}
+
+func (a *App) handleExportDevicesColumns(w http.ResponseWriter, r *http.Request) {
+	cols := []map[string]any{
+		{"key": "hostname", "header": "Hostname", "per_member": false},
+		{"key": "ip", "header": "IP", "per_member": false},
+		{"key": "vendor", "header": "Vendor", "per_member": false},
+		{"key": "model", "header": "Model", "per_member": false},
+		{"key": "serial", "header": "Serial", "per_member": false},
+		{"key": "group", "header": "Tenant", "per_member": false},
+		{"key": "site", "header": "Site", "per_member": false},
+		{"key": "version", "header": "Version", "per_member": false},
+		{"key": "status", "header": "Status", "per_member": false},
+		{"key": "profile", "header": "Profile", "per_member": false},
+		{"key": "ssh_port", "header": "SSH Port", "per_member": false},
+		{"key": "transports", "header": "Transports", "per_member": false},
+		{"key": "redundancy_type", "header": "Redundancy", "per_member": false},
+		{"key": "redundancy_role", "header": "Redundancy Role", "per_member": false},
+		{"key": "redundancy_health", "header": "Redundancy Health", "per_member": false},
+		{"key": "redundancy_name", "header": "Redundancy Group", "per_member": false},
+		{"key": "member_count", "header": "Members", "per_member": false},
+		{"key": "member_index", "header": "Member #", "per_member": true},
+		{"key": "member_role", "header": "Member Role", "per_member": true},
+		{"key": "member_serial", "header": "Member Serial", "per_member": true},
+		{"key": "member_model", "header": "Member Model", "per_member": true},
+		{"key": "member_state", "header": "Member State", "per_member": true},
+	}
+	defaults := []string{"hostname", "ip", "vendor", "group", "version", "status"}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"columns": cols,
+		"default": defaults,
+	})
+}
+
 func (a *App) handleExportDevices(w http.ResponseWriter, r *http.Request) {
 	claims := claimsFrom(r.Context())
 	scoped, _ := a.tenantsForUser(claims.Username, claims.Role)

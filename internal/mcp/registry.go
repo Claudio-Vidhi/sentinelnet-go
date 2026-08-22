@@ -474,6 +474,54 @@ var Tools = []Tool{
 				"limit": "50"}}
 		},
 	},
+	{
+		Name:        "linux_health",
+		Description: "Get the latest health snapshot of a managed Linux host: uptime, kernel, failed systemd units and the measured CPU / memory / disk usage. Read-only, tenant-scoped.",
+		InputSchema: objP(map[string]any{
+			"ip": mergeDesc(strP(), "Management IP of the Linux host"),
+		}, "ip"),
+		BuildRequest: func(a map[string]any) Request {
+			return Request{Method: "GET", Path: "/api/observability/api-context", Query: map[string]string{
+				"device_ip": str(a, "ip"),
+			}}
+		},
+	},
+	{
+		Name:        "policy_trace",
+		Description: "Traces a packet flow through device ACLs, routes, and firewall policies from backup configs (offline). Answers reachability and path validation questions.",
+		InputSchema: objP(map[string]any{
+			"ip":      mergeDesc(strP(), "Device IP"),
+			"src":     mergeDesc(strP(), "Source IP address"),
+			"dst":     mergeDesc(strP(), "Destination IP address"),
+			"proto":   mergeDesc(strP(), "Protocol: tcp (default), udp, icmp, ip"),
+			"dport":   mergeDesc(intP(), "Destination port (e.g. 443, 80)"),
+			"ingress": mergeDesc(strP(), "Ingress interface name (optional)"),
+		}, "ip", "src", "dst"),
+		BuildRequest: func(a map[string]any) Request {
+			body := map[string]any{
+				"src_ip": str(a, "src"),
+				"dst_ip": str(a, "dst"),
+				"proto":  strOr(a, "proto", "tcp"),
+			}
+			if dp := intOr(a, "dport", 0); dp > 0 {
+				body["dport"] = dp
+			}
+			if ingress, ok := a["ingress"]; ok && ingress != nil && ingress != "" {
+				body["ingress_intf"] = ingress
+			}
+			return Request{Method: "POST", Path: "/api/policy-test/" + str(a, "ip") + "/trace", Body: body}
+		},
+	},
+	{
+		Name:        "policy_findings",
+		Description: "Returns static configuration findings (shadowed rules, unreachable rules, any-any permits, routes to nowhere, unresolved objects) for a device.",
+		InputSchema: objP(map[string]any{
+			"ip": mergeDesc(strP(), "Device IP"),
+		}, "ip"),
+		BuildRequest: func(a map[string]any) Request {
+			return Request{Method: "GET", Path: "/api/policy-test/" + str(a, "ip") + "/findings"}
+		},
+	},
 }
 
 // Catalog ritorna nome+descrizione di ogni tool per la rotta /api/mcp/settings.

@@ -102,6 +102,22 @@ func (a *App) wlcQuery(w http.ResponseWriter, r *http.Request, service, mac stri
 
 // ---- osservabilità (auth: qualunque utente) ----
 
+func (a *App) handleWLCOverview(w http.ResponseWriter, r *http.Request) {
+	d, ok := a.wlcDevice(w, r)
+	if !ok {
+		return
+	}
+	run, closeSession := a.wlcRunner(d)
+	defer closeSession()
+
+	res, err := wlc.GetOverview(r.Context(), run, d.Vendor)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 func (a *App) handleWLCStatus(w http.ResponseWriter, r *http.Request) {
 	a.wlcQuery(w, r, "status", "")
 }

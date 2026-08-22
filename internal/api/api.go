@@ -1,4 +1,4 @@
-﻿// Package api: router HTTP, middleware (auth/RBAC/tenant scoping) e handler,
+// Package api: router HTTP, middleware (auth/RBAC/tenant scoping) e handler,
 // con contratti JSON identici all'app FastAPI cosi la dashboard gira invariata.
 package api
 
@@ -120,4 +120,13 @@ func canSeeTenant(scoped []string, tenant string) bool {
 		}
 	}
 	return false
+}
+
+const Version = "2.4.0"
+
+func (a *App) handleVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{
+		"app":     "SentinelNet",
+		"version": Version,
+	})
 }

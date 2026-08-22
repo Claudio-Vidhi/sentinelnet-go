@@ -44,6 +44,7 @@ func TestRequestMapMatchesPythonGolden(t *testing.T) {
 	sample := map[string]any{
 		"ip": "10.0.0.1", "mac": "aa:bb:cc:dd:ee:ff", "command": "show version",
 		"src_ip": "10.0.0.5", "dst_ip": "8.8.8.8", "dest": "8.8.8.8",
+		"src": "10.0.0.5", "dst": "8.8.8.8", "dport": float64(443),
 		"dest_port": float64(443), "count": float64(100), "hostname": "H1",
 		"window": "15m", "limit": float64(20), "metric": "bytes", "status": "new",
 		"group": "all", "vlan": "10", "interface": "Gi0/1", "switch": "10.0.0.2",

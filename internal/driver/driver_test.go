@@ -100,6 +100,15 @@ func TestGetVersionPerVendor(t *testing.T) {
 			backup:  "show config running",
 			arpComm: "show arp all",
 		},
+		{
+			name:    "linux",
+			drv:     LinuxDriver{},
+			cmd:     "cat /etc/os-release; uname -r",
+			out:     "NAME=\"Ubuntu\"\nVERSION=\"22.04.3 LTS (Jammy Jellyfish)\"\nPRETTY_NAME=\"Ubuntu 22.04.3 LTS\"\n5.15.0-88-generic\n",
+			want:    "Ubuntu 22.04.3 LTS (5.15.0-88-generic)",
+			backup:  (LinuxDriver{}).BackupCommand(),
+			arpComm: "ip neigh show || arp -n",
+		},
 	}
 
 	for _, c := range cases {

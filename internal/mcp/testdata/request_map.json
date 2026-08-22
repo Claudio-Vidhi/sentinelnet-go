@@ -199,6 +199,14 @@
     "params": null,
     "path": "/api/triage-status"
   },
+  "linux_health": {
+    "body": null,
+    "method": "GET",
+    "params": {
+      "device_ip": "10.0.0.1"
+    },
+    "path": "/api/observability/api-context"
+  },
   "list_devices": {
     "body": null,
     "method": "GET",
@@ -227,6 +235,23 @@
       "mac": "aa:bb:cc:dd:ee:ff"
     },
     "path": "/api/arp/search"
+  },
+  "policy_findings": {
+    "body": null,
+    "method": "GET",
+    "params": null,
+    "path": "/api/policy-test/10.0.0.1/findings"
+  },
+  "policy_trace": {
+    "body": {
+      "dport": 443,
+      "dst_ip": "8.8.8.8",
+      "proto": "tcp",
+      "src_ip": "10.0.0.5"
+    },
+    "method": "POST",
+    "params": null,
+    "path": "/api/policy-test/10.0.0.1/trace"
   },
   "search_mac": {
     "body": null,

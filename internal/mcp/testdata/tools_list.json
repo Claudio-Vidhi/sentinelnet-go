@@ -810,6 +810,76 @@
         "type": "object"
       },
       "name": "get_anomalies"
+    },
+    {
+      "description": "Get the latest health snapshot of a managed Linux host: uptime, kernel, failed systemd units and the measured CPU / memory / disk usage. Read-only, tenant-scoped.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "description": "Management IP of the Linux host",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "linux_health"
+    },
+    {
+      "description": "Traces a packet flow through device ACLs, routes, and firewall policies from backup configs (offline). Answers reachability and path validation questions.",
+      "inputSchema": {
+        "properties": {
+          "dport": {
+            "description": "Destination port (e.g. 443, 80)",
+            "type": "integer"
+          },
+          "dst": {
+            "description": "Destination IP address",
+            "type": "string"
+          },
+          "ingress": {
+            "description": "Ingress interface name (optional)",
+            "type": "string"
+          },
+          "ip": {
+            "description": "Device IP",
+            "type": "string"
+          },
+          "proto": {
+            "description": "Protocol: tcp (default), udp, icmp, ip",
+            "type": "string"
+          },
+          "src": {
+            "description": "Source IP address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip",
+          "src",
+          "dst"
+        ],
+        "type": "object"
+      },
+      "name": "policy_trace"
+    },
+    {
+      "description": "Returns static configuration findings (shadowed rules, unreachable rules, any-any permits, routes to nowhere, unresolved objects) for a device.",
+      "inputSchema": {
+        "properties": {
+          "ip": {
+            "description": "Device IP",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ip"
+        ],
+        "type": "object"
+      },
+      "name": "policy_findings"
     }
   ]
 }

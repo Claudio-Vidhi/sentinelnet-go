@@ -190,3 +190,42 @@ func DiagnoseWifiClient(ctx context.Context, run Runner, ip, vendor, mac string)
 	}
 	return d
 }
+
+// OverviewResult rappresenta la fotografia del controller WLC.
+type OverviewResult struct {
+	Platform    string            `json:"platform"`
+	Version     string            `json:"version"`
+	Uptime      string            `json:"uptime"`
+	APCount     int               `json:"ap_count"`
+	ClientCount int               `json:"client_count"`
+	APs         []map[string]any  `json:"aps"`
+	Clients     []map[string]any  `json:"clients"`
+	WLANs       []map[string]any  `json:"wlans"`
+	Rogues      []map[string]any  `json:"rogues"`
+	Raw         map[string]string `json:"raw"`
+}
+
+// GetOverview raccoglie AP, client, WLAN e rogue AP dal WLC.
+func GetOverview(ctx context.Context, run Runner, vendor string) (OverviewResult, error) {
+	p := PlatformOf(vendor)
+	raw := make(map[string]string)
+
+	for _, svc := range []string{"ap_summary", "client_summary", "wlan_summary", "rogue_aps"} {
+		res, err := Query(ctx, run, vendor, svc, "")
+		if err != nil {
+			raw[svc] = ""
+			raw[svc+"_error"] = err.Error()
+		} else {
+			raw[svc] = res.Data
+		}
+	}
+
+	return OverviewResult{
+		Platform: string(p),
+		APs:      []map[string]any{},
+		Clients:  []map[string]any{},
+		WLANs:    []map[string]any{},
+		Rogues:   []map[string]any{},
+		Raw:      raw,
+	}, nil
+}

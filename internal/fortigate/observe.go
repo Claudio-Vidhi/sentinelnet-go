@@ -194,6 +194,41 @@ func (c *Client) Sessions(ctx context.Context, srcIP, dstIP string, dstPort, cou
 	return c.apiOrSSH(ctx, "monitor/firewall/session", params, sshCmd, ssh)
 }
 
+// DeleteSessions termina le sessioni attive sul FortiGate in base ai filtri via SSH.
+func (c *Client) DeleteSessions(ctx context.Context, srcIP, dstIP string, dstPort int, ssh SSHRunner) (Result, error) {
+	if ssh == nil {
+		return Result{}, fmt.Errorf("ssh runner non configurato per cancellare le sessioni")
+	}
+	var filters []string
+	if srcIP != "" {
+		filters = append(filters, "diagnose sys session filter src "+srcIP)
+	}
+	if dstIP != "" {
+		filters = append(filters, "diagnose sys session filter dst "+dstIP)
+	}
+	if dstPort > 0 {
+		filters = append(filters, fmt.Sprintf("diagnose sys session filter dport %d", dstPort))
+	}
+	if len(filters) == 0 {
+		return Result{}, fmt.Errorf("almeno un filtro (src_ip, dst_ip, dst_port) è obbligatorio per terminare le sessioni")
+	}
+	sshCmd := strings.Join(append(
+		append([]string{"diagnose sys session filter clear"}, filters...),
+		"diagnose sys session clear"), "\n")
+	out, err := ssh(ctx, sshCmd)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{
+		Source: "ssh",
+		Data: map[string]any{
+			"status":  "success",
+			"message": "Filter applied and sessions cleared",
+			"output":  out,
+		},
+	}, nil
+}
+
 // --- Endpoint solo REST ---
 
 // FirewallAddresses, PolicyObjects e CustomServices usano la proiezione dei

@@ -1,4 +1,4 @@
-﻿// Package driver: astrazione per-vendor dei comandi CLI (versione, backup, ARP).
+// Package driver: astrazione per-vendor dei comandi CLI (versione, backup, ARP).
 // Porta di drivers/*.py + DRIVER_REGISTRY/VENDOR_DRIVER_DEFAULTS di core/core_engine.py.
 //
 // Le regex sono replicate alla lettera dai driver Python: NON vanno "migliorate",
@@ -38,9 +38,10 @@ var registry = map[string]Driver{
 	"paloalto_panos": PaloAlto{},
 	"cisco_wlc":      CiscoWLC{},
 	"cisco_9800":     CiscoIOS{},
+	"linux":          LinuxDriver{},
 }
 
-// vendorDefaults: fallback nome-vendor â†’ nome-driver, usato quando il registro
+// vendorDefaults: fallback nome-vendor -> nome-driver, usato quando il registro
 // vendor non specifica un driver. Corrisponde a VENDOR_DRIVER_DEFAULTS.
 var vendorDefaults = map[string]string{
 	"cisco":      "cisco_ios",
@@ -53,6 +54,14 @@ var vendorDefaults = map[string]string{
 	"paloalto":   "paloalto_panos",
 	"cisco_wlc":  "cisco_wlc",
 	"cisco_9800": "cisco_9800",
+	"linux":      "linux",
+	"ubuntu":     "linux",
+	"debian":     "linux",
+	"rhel":       "linux",
+	"centos":     "linux",
+	"rocky":      "linux",
+	"fedora":     "linux",
+	"alpine":     "linux",
 }
 
 // Resolve risolve un vendor nel driver corrispondente, con lo stesso ordine del

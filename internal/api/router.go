@@ -20,9 +20,10 @@ func (a *App) Router() http.Handler {
 		r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.FS(staticSub))))
 	}
 	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("ok")) })
+	r.Get("/api/version", a.handleVersion)
 
 	// Heartbeat dell'interfaccia (pub): la sua assenza arresta il server quando
-	// autoShutdown Ã¨ attivo. GET e POST (fetch keepalive / sendBeacon).
+	// autoShutdown è attivo. GET e POST (fetch keepalive / sendBeacon).
 	r.Get("/api/heartbeat", a.handleHeartbeat)
 	r.Post("/api/heartbeat", a.handleHeartbeat)
 
@@ -45,11 +46,13 @@ func (a *App) Router() http.Handler {
 
 	// --- Inventory (auth read / op write) ---
 	r.Get("/api/local-devices", a.requireAuth("", a.handleLocalDevices))
+	r.Get("/api/export/devices/columns", a.requireAuth("", a.handleExportDevicesColumns))
 	r.Get("/api/export/devices", a.requireAuth("", a.handleExportDevices))
 	r.Post("/api/add-device", a.requireAuth("operator", a.handleAddDevice))
 	r.Post("/api/delete-device", a.requireAuth("operator", a.handleDeleteDevice))
 	r.Post("/api/rename-device", a.requireAuth("operator", a.handleRenameDevice))
 	r.Post("/api/reassign-device", a.requireAuth("operator", a.handleReassignDevice))
+	r.Post("/api/reassign-device-site", a.requireAuth("operator", a.handleReassignDeviceSite))
 	r.Post("/api/import-csv", a.requireAuth("operator", a.handleImportCSV))
 
 	// --- Tenants/Groups ---
@@ -141,12 +144,14 @@ func (a *App) Router() http.Handler {
 	r.Get("/api/fortigate/{ip}/firewall/services", a.requireAuth("", a.handleFGTCustomServices))
 	r.Post("/api/fortigate/{ip}/policy-lookup", a.requireAuth("", a.handleFGTPolicyLookup))
 	r.Post("/api/fortigate/{ip}/sessions", a.requireAuth("", a.handleFGTSessions))
+	r.Delete("/api/fortigate/{ip}/sessions", a.requireAuth("operator", a.handleFGTDeleteSessions))
 	r.Post("/api/fortigate/{ip}/logs", a.requireAuth("", a.handleFGTLogs))
 	r.Post("/api/fortigate/{ip}/diagnose-client", a.requireAuth("", a.handleFGTDiagnoseClient))
-	// Contiene segreti: richiede 'operator' ed Ã¨ sempre in audit.
+	// Contiene segreti: richiede 'operator' ed è sempre in audit.
 	r.Get("/api/fortigate/{ip}/full-config", a.requireAuth("operator", a.handleFGTFullConfig))
 
-	// --- WLC: osservabilitÃ  wireless Cisco (auth read, tenant-scoped via assertDeviceAllowed) ---
+	// --- WLC: osservabilità wireless Cisco (auth read, tenant-scoped via assertDeviceAllowed) ---
+	r.Get("/api/wlc/{ip}/overview", a.requireAuth("", a.handleWLCOverview))
 	r.Get("/api/wlc/{ip}/status", a.requireAuth("", a.handleWLCStatus))
 	r.Get("/api/wlc/{ip}/ap-summary", a.requireAuth("", a.handleWLCAPSummary))
 	r.Get("/api/wlc/{ip}/client-summary", a.requireAuth("", a.handleWLCClientSummary))
@@ -257,8 +262,19 @@ func (a *App) Router() http.Handler {
 	r.Post("/api/settings/cli-blacklist", a.requireAuth("admin", a.handleSetCliBlacklistSettings))
 	r.Get("/api/settings/fortigate-preview", a.requireAuth("admin", a.handleGetFortigatePreviewSettings))
 	r.Post("/api/settings/fortigate-preview", a.requireAuth("admin", a.handleSetFortigatePreviewSettings))
+	r.Get("/api/settings/ping-monitor", a.requireAuth("admin", a.handleGetPingMonitorSettings))
+	r.Post("/api/settings/ping-monitor", a.requireAuth("admin", a.handleSetPingMonitorSettings))
+	r.Get("/api/ping-monitor/status", a.requireAuth("", a.handleGetPingMonitorStatus))
+	r.Get("/api/settings/snmp-defaults", a.requireAuth("", a.handleGetSNMPDefaults))
+	r.Post("/api/settings/snmp-defaults", a.requireAuth("admin", a.handleSetSNMPDefaults))
 	r.Get("/api/settings/app", a.requireAuth("admin", a.handleGetAppSettings))
 	r.Post("/api/settings/app", a.requireAuth("admin", a.handleSetAppSettings))
+
+	// --- Policy Test & Verification ---
+	r.Post("/api/policy-test/{ip}/trace", a.requireAuth("", a.handlePolicyTrace))
+	r.Get("/api/policy-test/{ip}/examples", a.requireAuth("", a.handlePolicyExamples))
+	r.Get("/api/policy-test/{ip}/findings", a.requireAuth("", a.handlePolicyFindings))
+	r.Post("/api/policy-test/{ip}/prove", a.requireAuth("", a.handlePolicyProve))
 
 	// --- AI Profiles (adm) ---
 	r.Get("/api/ai/profiles", a.requireAuth("admin", a.handleListAIProfiles))

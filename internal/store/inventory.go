@@ -105,6 +105,11 @@ func (s *Store) SetDeviceTenant(ip, tenant string) error {
 	return err
 }
 
+func (s *Store) SetDeviceSite(ip, site string) error {
+	_, err := s.DB.Exec(`UPDATE devices SET site = ? WHERE ip = ?`, site, ip)
+	return err
+}
+
 // UpsertDeviceForPromotion crea un gestito da un vicino scoperto senza toccare
 // le credenziali di un device già esistente (profile=default).
 func (s *Store) UpsertDeviceForPromotion(ip, vendor, tenant, hostname string) error {

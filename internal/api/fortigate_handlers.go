@@ -439,6 +439,17 @@ func (a *App) handleFGTSessions(w http.ResponseWriter, r *http.Request) {
 	fgtRespond(w, res, err)
 }
 
+func (a *App) handleFGTDeleteSessions(w http.ResponseWriter, r *http.Request) {
+	d, c, ok := a.fgtDevice(w, r)
+	if !ok {
+		return
+	}
+	var req fgtSessionsReq
+	_ = decodeJSON(r, &req)
+	res, err := c.DeleteSessions(r.Context(), req.SrcIP, req.DstIP, req.DstPort, a.fgtSSH(d))
+	fgtRespond(w, res, err)
+}
+
 type fgtLogsReq struct {
 	SrcIP     string `json:"src_ip"`
 	DstIP     string `json:"dst_ip"`
